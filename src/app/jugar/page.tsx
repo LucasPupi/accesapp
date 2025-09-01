@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { preguntas } from "@/data/preguntas";
 
 /* Helpers */
@@ -34,11 +35,13 @@ export default function JugarPage() {
   const [timeLeft, setTimeLeft] = useState(q.tiempo);
   const [paused, setPaused] = useState(false);
   const [limitDisabled, setLimitDisabled] = useState(false);
-  const [selection, setSelection] = useState<number | null>(null);
+  const [selection, setSelection] = useState<number[]>([]);  // 👈 múltiple
   const [timedOut, setTimedOut] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const [feedback, setFeedback] = useState("");
   const feedbackRef = useRef<HTMLDivElement>(null);
+
+  const multi = q.correctas.length > 1;
 
   // Opciones barajadas (manteniendo índice real)
   const opcionesShuf = useMemo(() => {
@@ -54,56 +57,83 @@ export default function JugarPage() {
     feedback.startsWith("✅") ? "ok" :
     feedback.startsWith("❌") ? "bad" : "";
 
-  /* Efectos */
+  // Reiniciar estado cada vez que cambia la pregunta
   useEffect(() => {
     setTimeLeft(q.tiempo);
     setPaused(false);
     setLimitDisabled(false);
-    setSelection(null);
+    setSelection([]);
     setTimedOut(false);
     setCanNext(false);
     setFeedback("");
   }, [idx, q.tiempo]);
 
+  /* Declarar handleTimeout ANTES del useEffect que lo usa */
+  const handleTimeout = useCallback(() => {
+    setTimedOut(true);
+    setPaused(true);
+    setCanNext(true);
+    const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
+    setFeedback(`⏳ Tiempo agotado. Correctas: ${correctTexts}. ${q.explicacion}`);
+    setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  }, [q]);
+
+  // Timer
   useEffect(() => {
     if (limitDisabled || paused || timedOut || showResults) return;
     if (timeLeft <= 0) { handleTimeout(); return; }
     const id = setInterval(() => setTimeLeft(t => t - 1), 1000);
     return () => clearInterval(id);
-  }, [limitDisabled, paused, timedOut, showResults, timeLeft]);
+  }, [limitDisabled, paused, timedOut, showResults, timeLeft, handleTimeout]);
+
+  // Toggle selección múltiple
+  function toggleSelect(i: number) {
+    setSelection(prev =>
+      prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]
+    );
+  }
 
   /* Handlers */
-  function handleTimeout() {
-    setTimedOut(true);
-    setPaused(true);
-    setCanNext(true);
-    setFeedback(`⏳ Tiempo agotado. Era: "${q.opciones[q.correcta]}". ${q.explicacion}`);
-    setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
-  }
   function handleConfirm() {
-    if (selection === null) { setFeedback("Elegí una opción antes de confirmar."); return; }
-    const ok = selection === q.correcta;
+    if (selection.length === 0) {
+      setFeedback("Elegí al menos una opción antes de confirmar.");
+      return;
+    }
+    const selectedSet = new Set(selection);
+    const correctSet = new Set(q.correctas);
+
+    const ok =
+      selectedSet.size === correctSet.size &&
+      [...correctSet].every(i => selectedSet.has(i));
+
     if (ok) setScore(s => s + 1);
+
+    const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
+    const chosenTexts = selection.map(i => q.opciones[i]).join(", ");
+
     setFeedback(
       ok
         ? `✅ Correcto. ${q.explicacion}`
-        : `❌ Incorrecto. Era: "${q.opciones[q.correcta]}". ${q.explicacion}`
+        : `❌ Incorrecto. Correctas: ${correctTexts}. Vos marcaste: ${chosenTexts}. ${q.explicacion}`
     );
+
     setCanNext(true);
     setPaused(true);
     setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
+
   function handleNext() {
     if (idx < preguntas.length - 1) setIdx(i => i + 1);
     else setShowResults(true);
   }
+
   function handleRestart() {
     const newOrder = shuffle([...Array(preguntas.length).keys()]);
     setOrder(newOrder);
     setIdx(0); setScore(0); setShowResults(false);
     const first = preguntas[newOrder[0]];
     setTimeLeft(first.tiempo); setPaused(false); setLimitDisabled(false);
-    setSelection(null); setTimedOut(false); setCanNext(false); setFeedback("");
+    setSelection([]); setTimedOut(false); setCanNext(false); setFeedback("");
   }
 
   /* Resultados */
@@ -149,7 +179,9 @@ export default function JugarPage() {
         <Link href="/" className="link">← Volver</Link>
 
         <h1 className="game-title">Pregunta {idx + 1} de {preguntas.length}</h1>
-        <p className="game-subtitle">Observá la imagen y seleccioná la opción correcta.</p>
+        <p className="game-subtitle">
+          Observá la imagen y seleccioná {multi ? "una o más opciones" : "la opción correcta"}.
+        </p>
 
         {/* Progreso */}
         <div className="progress">
@@ -162,9 +194,6 @@ export default function JugarPage() {
             aria-valuenow={progress}
           >
             <div className="progress-bar" style={{ width: `${progress}%` }} />
-            {/* Si querés el número dentro de la barra, descomentá esto:
-            <div className="progress-value">{progress}%</div>
-            */}
           </div>
           <p className="progress-label mt-2">{progress}%</p>
         </div>
@@ -191,11 +220,19 @@ export default function JugarPage() {
 
         {/* Imagen */}
         <figure className="mt-6">
-          <img src={q.imagen} alt="" className="img-modern" />
+          <Image
+            src={q.imagen}
+            alt=""
+            width={1280}
+            height={720}
+            className="img-modern"
+            priority={idx === 0}
+            sizes="(max-width: 768px) 100vw, 800px"
+          />
           <figcaption className="muted mt-2">{q.enunciado}</figcaption>
         </figure>
 
-        {/* Opciones */}
+        {/* Opciones (checkboxes) */}
         <form className="mt-6">
           <fieldset>
             <legend className="mb-2">
@@ -204,14 +241,14 @@ export default function JugarPage() {
 
             <div className="options-grid">
               {opcionesShuf.map((op, j) => {
-                const active = selection === op.i;
+                const active = selection.includes(op.i);
                 return (
                   <label key={j} className={`option ${active ? "option--active pop" : ""}`}>
                     <input
-                      type="radio"
-                      name="respuesta"
+                      type="checkbox"
+                      name={`respuesta-${q.id}`}
                       checked={active}
-                      onChange={() => setSelection(op.i)}
+                      onChange={() => toggleSelect(op.i)}
                     />
                     <span>{op.texto}</span>
                   </label>
@@ -224,7 +261,7 @@ export default function JugarPage() {
             <button
               type="button"
               className="btn btn-primary btn-lg"
-              disabled={selection === null || canNext}
+              disabled={selection.length === 0 || canNext}
               onClick={handleConfirm}
             >
               Confirmar
