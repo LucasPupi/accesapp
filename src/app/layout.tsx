@@ -21,10 +21,6 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} bg-app`}>
         {/* overlay con halos (CSS puro) */}
         <div className="accents-overlay"></div>
-
-        {/* skip link básico (si querés, después lo estilizamos) */}
-        <a href="#contenido" className="sr-only">Saltar al contenido</a>
-
         {children}
       </body>
     </html>

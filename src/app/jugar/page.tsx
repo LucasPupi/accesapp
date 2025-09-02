@@ -35,7 +35,7 @@ export default function JugarPage() {
   const [timeLeft, setTimeLeft] = useState(q.tiempo);
   const [paused, setPaused] = useState(false);
   const [limitDisabled, setLimitDisabled] = useState(false);
-  const [selection, setSelection] = useState<number[]>([]);  // 👈 múltiple
+  const [selection, setSelection] = useState<number[]>([]);
   const [timedOut, setTimedOut] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -51,13 +51,12 @@ export default function JugarPage() {
 
   const progress = showResults ? 100 : Math.round(((idx + 1) / preguntas.length) * 100);
 
-  // Tipo de feedback para colorear la cajita
   const feedbackType =
     timedOut ? "time" :
     feedback.startsWith("✅") ? "ok" :
     feedback.startsWith("❌") ? "bad" : "";
 
-  // Reiniciar estado cada vez que cambia la pregunta
+  // Reset por pregunta
   useEffect(() => {
     setTimeLeft(q.tiempo);
     setPaused(false);
@@ -68,7 +67,6 @@ export default function JugarPage() {
     setFeedback("");
   }, [idx, q.tiempo]);
 
-  /* Declarar handleTimeout ANTES del useEffect que lo usa */
   const handleTimeout = useCallback(() => {
     setTimedOut(true);
     setPaused(true);
@@ -86,14 +84,12 @@ export default function JugarPage() {
     return () => clearInterval(id);
   }, [limitDisabled, paused, timedOut, showResults, timeLeft, handleTimeout]);
 
-  // Toggle selección múltiple
   function toggleSelect(i: number) {
     setSelection(prev =>
       prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]
     );
   }
 
-  /* Handlers */
   function handleConfirm() {
     if (selection.length === 0) {
       setFeedback("Elegí al menos una opción antes de confirmar.");
@@ -101,7 +97,6 @@ export default function JugarPage() {
     }
     const selectedSet = new Set(selection);
     const correctSet = new Set(q.correctas);
-
     const ok =
       selectedSet.size === correctSet.size &&
       [...correctSet].every(i => selectedSet.has(i));
@@ -110,7 +105,6 @@ export default function JugarPage() {
 
     const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
     const chosenTexts = selection.map(i => q.opciones[i]).join(", ");
-
     setFeedback(
       ok
         ? `✅ Correcto. ${q.explicacion}`
@@ -139,111 +133,102 @@ export default function JugarPage() {
   /* Resultados */
   if (showResults) {
     return (
-      <main id="contenido" className="page-main fade-in">
-        <div className="container-card lift">
-          <h1 className="game-title">Resultados</h1>
-          <p className="game-subtitle mt-2">
-            Puntaje: <strong>{score}</strong> / {preguntas.length}
-          </p>
+      <main id="contenido" className="q-wrap">
+        <section className="q-card">
+          <h1 style={{fontSize:22, fontWeight:800, color:"#2a2a2a"}}>Resultados</h1>
+          <p className="q-sub">Puntaje: <strong style={{color:"#111827"}}>{score}</strong> / {preguntas.length}</p>
 
           {/* Progreso 100% */}
-          <div className="progress">
-            <div
-              className="progress-track"
-              role="progressbar"
-              aria-label="Progreso"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={100}
-            >
-              <div className="progress-bar" style={{ width: `100%` }} />
-            </div>
-            <p className="progress-label mt-2">100%</p>
+          <div className="progress-track" role="progressbar" aria-label="Progreso"
+               aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}
+               style={{marginTop:12}}>
+            <div className="progress-bar" style={{ width: `100%` }} />
           </div>
+          <div className="progress-percent">100%</div>
 
-          <div className="row mt-6">
-            <button type="button" className="btn btn-primary btn-lg" onClick={handleRestart}>
+          <div style={{display:"flex", gap:12, marginTop:18}}>
+            <button type="button"
+                    onClick={handleRestart}
+                    className="btn-confirm enabled"
+                    style={{flex:1}}>
               Reiniciar
             </button>
-            <Link href="/" className="btn btn-outline btn-lg">Volver al inicio</Link>
+            <Link href="/" className="btn-next" style={{flex:1}}>
+              Volver al inicio
+            </Link>
           </div>
-        </div>
+        </section>
       </main>
     );
   }
 
   /* Pregunta */
   return (
-    <main id="contenido" className="page-main fade-in">
-      <div className="container-card lift">
-        <Link href="/" className="link">← Volver</Link>
-
-        <h1 className="game-title">Pregunta {idx + 1} de {preguntas.length}</h1>
-        <p className="game-subtitle">
+    <main id="contenido" className="q-wrap">
+      {/* CARD 1: header + progreso */}
+      <section className="q-card q-head">
+        <Link href="/" aria-label="Volver" style={{color:"#4b5563"}}>←</Link>
+        <h1>Pregunta {idx + 1} de {preguntas.length}</h1>
+        <p className="q-sub">
           Observá la imagen y seleccioná {multi ? "una o más opciones" : "la opción correcta"}.
         </p>
 
-        {/* Progreso */}
-        <div className="progress">
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="Progreso"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress}
-          >
-            <div className="progress-bar" style={{ width: `${progress}%` }} />
-          </div>
-          <p className="progress-label mt-2">{progress}%</p>
+        <div className="progress-track" aria-label="Progreso" role="progressbar"
+             aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <div className="progress-bar" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="progress-percent">{progress}%</div>
+      </section>
+
+      {/* CARD 2: timer + controles */}
+      <section className="q-card q-timer">
+        <div className="time-pill">
+          {/* icono reloj */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" style={{marginRight:6}}>
+            <circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2"/><path d="M9 3h6"/>
+          </svg>
+          <span>Tiempo restante:&nbsp;</span>
+          <span className="time-value">{formatTime(timeLeft)}</span>
         </div>
 
-        {/* Temporizador */}
-        <section className="mt-6">
-          <div className="timer-row">
-            <div className="pill">
-              <span>Tiempo restante:</span>
-              <span className="time-value">{formatTime(timeLeft)}</span>
-            </div>
+        <div style={{display:"flex", gap:"10px", marginTop:"12px", flexWrap:"wrap"}}>
+          <button type="button" className="btn-sm" onClick={() => setPaused(p => !p)}>
+            Pausar
+          </button>
+          <button type="button" className="btn-sm" onClick={() => !limitDisabled && setTimeLeft(t => t + 60)}>
+            +60s
+          </button>
+          <button type="button" className="btn-sm" onClick={() => setLimitDisabled(true)}>
+            Desactivar límite
+          </button>
+        </div>
+      </section>
 
-            <button type="button" className="btn btn-outline" onClick={() => setPaused(p => !p)}>
-              {paused ? "Reanudar" : "Pausar"}
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => !limitDisabled && setTimeLeft(t => t + 60)}>
-              +60 s
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => setLimitDisabled(true)}>
-              Desactivar límite
-            </button>
-          </div>
-        </section>
-
-        {/* Imagen */}
-        <figure className="mt-6">
+      {/* CARD 3: imagen */}
+      <section className="q-card q-media">
+        <div className="media">
           <Image
             src={q.imagen}
             alt=""
-            width={1280}
-            height={720}
-            className="img-modern"
-            priority={idx === 0}
+            fill
             sizes="(max-width: 768px) 100vw, 800px"
+            className=""
+            priority={idx === 0}
           />
-          <figcaption className="muted mt-2">{q.enunciado}</figcaption>
-        </figure>
+        </div>
+      </section>
 
-        {/* Opciones (checkboxes) */}
-        <form className="mt-6">
+      {/* CARD 4: opciones + acciones */}
+      <section className="q-card q-options">
+        <form>
           <fieldset>
-            <legend className="mb-2">
-              <h2 className="question-text">{q.enunciado}</h2>
-            </legend>
+            <legend>¿Qué barreras se visualizan en la imagen?</legend>
 
             <div className="options-grid">
               {opcionesShuf.map((op, j) => {
                 const active = selection.includes(op.i);
                 return (
-                  <label key={j} className={`option ${active ? "option--active pop" : ""}`}>
+                  <label key={j} className={`option ${active ? "option--active" : ""}`}>
                     <input
                       type="checkbox"
                       name={`respuesta-${q.id}`}
@@ -255,37 +240,38 @@ export default function JugarPage() {
                 );
               })}
             </div>
-          </fieldset>
 
-          <div className="row mt-6">
-            <button
-              type="button"
-              className="btn btn-primary btn-lg"
-              disabled={selection.length === 0 || canNext}
-              onClick={handleConfirm}
-            >
-              Confirmar
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-lg"
-              disabled={!canNext}
-              onClick={handleNext}
-            >
-              Siguiente
-            </button>
-          </div>
+            <div className="actions">
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={selection.length === 0 || canNext}
+                className={`btn-confirm ${selection.length!==0 && !canNext ? "enabled": ""}`}
+              >
+                Confirmar
+              </button>
 
-          {feedback && (
-            <div
-              ref={feedbackRef}
-              className={`feedback ${feedbackType ? `feedback--${feedbackType}` : ""}`}
-            >
-              {feedback}
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={!canNext}
+                className={`btn-next ${canNext ? "enabled": ""}`}
+              >
+                Siguiente
+              </button>
             </div>
-          )}
+
+            {feedback && (
+              <div
+                ref={feedbackRef}
+                className={`feedback ${feedbackType ? `feedback--${feedbackType}` : ""}`}
+              >
+                {feedback}
+              </div>
+            )}
+          </fieldset>
         </form>
-      </div>
+      </section>
     </main>
   );
 }
