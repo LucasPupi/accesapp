@@ -20,7 +20,7 @@ export const preguntas: Pregunta[] = [
     ],
     correctas: [0,1],
     tiempo: 60,
-    explicacion: "Ascensor ubicado en un edificio público. No cuenta con señalética visual ni táctil. Los botones están a una altura superior, inaccesibles para personas usuarias de silla de ruedas o de baja estatura. No hay sistema de audio que indique pisos ni apertura/cierre de puertas. Tampoco hay información en braille ni contraste visual en los comandos."
+    explicacion: "Ascensor ubicado en un edificio público. No cuenta con señalética visual ni táctil. Los botones están a una altura superior, inaccesibles para personas usuarias de silla de ruedas o de baja estatura. No hay sistema de audio que indique pisos ni apertura/cierre de puertas. Tampoco hay información en braille ni contraste visual en los comandos.",
   },
   {
     id: 2,
@@ -109,7 +109,7 @@ export const preguntas: Pregunta[] = [
       "Barrera comunicacional",
       "Barrera actitudinal"
     ],
-    correctas: [2],
+    correctas: [0,2],
     tiempo: 60,
     explicacion: "La barrera aparece cuando se naturaliza la inclusión como algo excepcional, sin cuestionar si hay autonomía, participación real (si hay igualdad de condiciones, o si se escucha la voz de la persona con discapacidad en la toma de decisiones) o adaptación del entorno. Asumir que “estar presente” equivale a “estar incluido” reproduce una mirada capacitista, aunque no sea intencional."
   },

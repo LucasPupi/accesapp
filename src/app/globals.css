@@ -562,3 +562,67 @@ body, .bg-app { background: var(--unm-bg); color: var(--unm-fg); }
 
 /* Opción activa: asegurar texto oscuro (por si quedaba gris) */
 .option--active span{ color:#0b1220; }
+
+
+/* === Mostrar SIEMPRE la imagen completa === */
+.q-media .media{
+  position: relative;
+  width: 100%;
+  /* ⛔ quitar el aspect-ratio fijo */
+  /* aspect-ratio:16/9; */
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #eef2f5;           /* letterbox clarito si sobra espacio */
+  box-shadow: 0 10px 28px -16px rgba(0,0,0,.12);
+}
+
+.q-media .media img{
+  display: block;
+  width: 100%;
+  height: auto;                   /* respeta proporción original */
+  object-fit: contain;            /* 🔑 no recorta nunca */
+  object-position: center;
+  max-height: 70vh;               /* evita que una imagen “gigante” rompa el layout */
+}
+
+
+/* === Fondo global con imagen + overlay oscuro === */
+:root{
+  /* ajustá el path y la intensidad del oscuro acá */
+  --site-bg-url: url("/fotos/bg.webp");
+  --site-bg-darkness: 0.8; /* 0.35 = suave, 0.55 = más oscuro */
+}
+
+html, body { height: 100%; }
+body {
+  position: relative;
+  background: transparent !important; /* para que se vea la imagen */
+}
+
+/* Imagen de fondo */
+body::before{
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: var(--site-bg-url) center / cover no-repeat fixed;
+  filter: saturate(1.05) contrast(1.05);
+}
+
+/* Capa oscura (overlay) arriba de la imagen */
+body::after{
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 120% at 50% 30%,
+      rgba(0,0,0, calc(var(--site-bg-darkness) - .10)) 0%,
+      rgba(0,0,0, var(--site-bg-darkness)) 55%,
+      rgba(0,0,0, calc(var(--site-bg-darkness) + .05)) 100%);
+}
+
+/* Si algún wrapper tenía fondo sólido, lo dejo transparente */
+.bg-app, .home-wrap { background: transparent !important; }
