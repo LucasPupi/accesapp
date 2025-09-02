@@ -8,8 +8,8 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 
 export const metadata: Metadata = {
-  title: "Juego de accesibilidad",
-  description: "creado por Lucas",
+  title: "Accesibilidad UNM",
+  description: "Aprende a detectar barreras",
 };
 
 export default function RootLayout({
