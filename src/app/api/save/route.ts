@@ -38,7 +38,7 @@ type Payload = {
   resumen?: ResumenCompat;
   detalle?: DetalleItem[];
 
-  // alias
+  // alias comunes
   name?: string;
   surname?: string;
   mail?: string;
@@ -47,8 +47,6 @@ type Payload = {
   total?: number;
   durationSec?: number;
   duracionSegundos?: number;
-  usedTimer?: boolean | string;
-  agotados?: number;
 
   details?: DetalleItem[];
   respuestas?: DetalleItem[];
@@ -58,15 +56,11 @@ type Normalized = {
   nombre: string;
   apellido: string;
   email: string;
-  puntaje: number;
+  puntaje: number;       // score
   correctas: number;
   total: number;
-  duracionSeg: number;
-  usoTiempo: boolean | string;
-  agotadoCount: number;
+  duracionSeg: number;   // tiempo_segundos
   imagenes: string[];
-  resumenTexto: string;
-  detalleTexto: string;
 };
 
 /* ===================== Helpers ===================== */
@@ -103,7 +97,6 @@ async function getSheets() {
       "Faltan credenciales: definí GOOGLE_SERVICE_ACCOUNT o (GOOGLE_CLIENT_EMAIL/GOOGLE_SERVICE_EMAIL + GOOGLE_PRIVATE_KEY)"
     );
   }
-  // ✅ Pasamos el GoogleAuth directamente como `auth` a google.sheets(...)
   const auth = new google.auth.GoogleAuth({
     credentials: { client_email, private_key },
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
@@ -144,48 +137,9 @@ function normalizeBody(body: unknown): Normalized {
         0
     ) || 0;
 
-  const usoTiempo = b.resumen?.usoTiempo ?? b.usedTimer ?? false;
-  const agotadoCount = Number(b.resumen?.agotados ?? b.agotados ?? 0) || 0;
-
   const imagenes = detalleArr
     .map((d) => d.imagenNombre || d.imagen || "")
     .filter((s) => !!s);
-
-  const resumenTexto =
-    total > 0
-      ? `Puntaje: ${puntaje}/${total} (aciertos: ${correctas}) · Duración: ${duracionSeg}s · Usó tiempo: ${
-          usoTiempo ? "sí" : "no"
-        } · Agotados: ${agotadoCount}`
-      : "";
-
-  const detalleTexto =
-    detalleArr.length > 0
-      ? detalleArr
-          .map((d, i) => {
-            const img = d.imagenNombre || d.imagen || "";
-            const estado = d.estado || (d.ok ? "correcto" : "incorrecto");
-            const sel =
-              Array.isArray(d.seleccionTextos) && d.seleccionTextos.length
-                ? d.seleccionTextos.join(", ")
-                : Array.isArray(d.seleccion)
-                ? d.seleccion.join(", ")
-                : "";
-            const cor =
-              Array.isArray(d.correctasTextos) && d.correctasTextos.length
-                ? d.correctasTextos.join(", ")
-                : Array.isArray(d.correctas)
-                ? d.correctas.join(", ")
-                : "";
-            const t =
-              typeof d.tiempoSeg === "number"
-                ? d.tiempoSeg
-                : typeof d.tiempoMs === "number"
-                ? Math.round(d.tiempoMs / 1000)
-                : 0;
-            return `${i + 1}. ${img} · ${estado} · sel: [${sel}] · ok: [${cor}] · ${t}s`;
-          })
-          .join("\n")
-      : "";
 
   return {
     nombre,
@@ -195,11 +149,7 @@ function normalizeBody(body: unknown): Normalized {
     correctas,
     total,
     duracionSeg,
-    usoTiempo,
-    agotadoCount,
     imagenes,
-    resumenTexto,
-    detalleTexto,
   };
 }
 
@@ -217,21 +167,18 @@ export async function POST(req: Request) {
 
     const n = normalizeBody(body);
 
+    // ✅ SOLO estas 8 columnas (en este orden)
+    const detalleResumen = `Puntaje: ${n.puntaje}/${n.total} · Duración: ${n.duracionSeg}s`;
     const values = [
       [
-        new Date().toISOString(),
+        new Date().toISOString(), // timestamp
         n.nombre,
         n.apellido,
         n.email,
-        `${n.puntaje}/${n.total}`,
-        n.correctas,
-        n.total,
-        n.duracionSeg,
-        n.usoTiempo ? "sí" : "no",
-        n.agotadoCount,
-        n.imagenes.join(", "),
-        n.resumenTexto,
-        n.detalleTexto,
+        n.puntaje,               // score (numérico)
+        n.total,                 // total (numérico)
+        n.duracionSeg,           // tiempo_segundos (numérico)
+        detalleResumen,          // detalle_resumen (texto corto)
       ],
     ] as (string | number)[][];
 
@@ -244,12 +191,6 @@ export async function POST(req: Request) {
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: { values },
-    });
-
-    console.log("[SAVE] OK fila escrita", {
-      email: n.email,
-      puntaje: `${n.puntaje}/${n.total}`,
-      imgs: n.imagenes.length,
     });
 
     return NextResponse.json({ ok: true });
