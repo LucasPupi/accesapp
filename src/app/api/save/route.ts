@@ -60,6 +60,42 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
+// Lee credenciales Google desde variables de entorno de forma robusta
+function getGoogleCreds() {
+  // Opción A: TODO el JSON del service account en base64
+  const jsonB64 = process.env.GOOGLE_CREDENTIALS_BASE64;
+
+  if (jsonB64 && jsonB64.trim() !== "") {
+    const json = Buffer.from(jsonB64, "base64").toString("utf8");
+    const parsed = JSON.parse(json);
+    return {
+      client_email: parsed.client_email as string,
+      private_key: String(parsed.private_key).replace(/\\n/g, "\n"),
+    };
+  }
+
+  // Opción B: email + private key (texto plano o base64)
+  const client_email = process.env.GOOGLE_SERVICE_EMAIL || "";
+  let key =
+    process.env.GOOGLE_PRIVATE_KEY ||
+    (process.env.GOOGLE_PRIVATE_KEY_BASE64
+      ? Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString(
+          "utf8"
+        )
+      : "");
+
+  // Arregla los saltos de línea escapados
+  key = key.replace(/\\n/g, "\n");
+
+  if (!client_email || !key) {
+    throw new Error(
+      "Faltan credenciales: defina GOOGLE_CREDENTIALS_BASE64 o GOOGLE_SERVICE_EMAIL + (GOOGLE_PRIVATE_KEY | GOOGLE_PRIVATE_KEY_BASE64)"
+    );
+  }
+
+  return { client_email, private_key: key };
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
@@ -73,15 +109,19 @@ export async function POST(req: Request) {
     }
 
     /** Auth (Service Account) */
-    const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL!;
-    const privateKeyRaw = process.env.GOOGLE_SHEETS_PRIVATE_KEY || "";
-    const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+    /**const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL!; */
+    /** const privateKeyRaw = process.env.GOOGLE_SHEETS_PRIVATE_KEY || ""; */
+    /** const privateKey = privateKeyRaw.replace(/\\n/g, "\n"); */
+
+    // ✅ versión nueva
+    const { client_email, private_key } = getGoogleCreds();
 
     const auth = new google.auth.JWT({
-      email: clientEmail,
-      key: privateKey,
+      email: client_email,
+      key: private_key,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
 
     const sheets = google.sheets({ version: "v4", auth });
 
