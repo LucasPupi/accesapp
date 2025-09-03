@@ -1,187 +1,277 @@
 // src/app/api/save/route.ts
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { google } from "googleapis";
 
-export const runtime = "nodejs"; // asegura Node (no Edge)
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// ==============================
-// 1) Lectura robusta de credenciales
-//    (acepta JSON base64 o email+key con nombres nuevos o viejos)
-// ==============================
-function getGoogleCreds() {
-  // A1) Todo el JSON del service account en BASE64 (RECOMENDADO)
-  const jsonB64 = process.env.GOOGLE_CREDENTIALS_BASE64;
-  if (jsonB64 && jsonB64.trim() !== "") {
-    const json = Buffer.from(jsonB64, "base64").toString("utf8");
-    const parsed = JSON.parse(json);
-    return {
-      client_email: String(parsed.client_email),
-      private_key: String(parsed.private_key).replace(/\\n/g, "\n"),
-    };
-  }
-
-  // A2) Todo el JSON crudo en UNA variable (multilínea)
-  const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT;
-  if (rawJson && rawJson.trim().startsWith("{")) {
-    const parsed = JSON.parse(rawJson);
-    return {
-      client_email: String(parsed.client_email),
-      private_key: String(parsed.private_key),
-    };
-  }
-
-  // B) Email + Private Key por separado (acepta nombres nuevos y los que venías usando)
-  const client_email =
-    process.env.GOOGLE_SERVICE_EMAIL ||
-    process.env.GOOGLE_CLIENT_EMAIL || // fallback
-    "";
-
-  let key =
-    process.env.GOOGLE_PRIVATE_KEY ||
-    process.env.GOOGLE_CLIENT_PRIVATE_KEY || // por si usaste este nombre
-    (process.env.GOOGLE_PRIVATE_KEY_BASE64
-      ? Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString(
-          "utf8"
-        )
-      : "");
-
-  // Arregla saltos de línea escapados por env
-  key = key.replace(/\\n/g, "\n");
-
-  if (!client_email || !key) {
-    throw new Error(
-      "Faltan credenciales: defina GOOGLE_CREDENTIALS_BASE64 o GOOGLE_SERVICE_ACCOUNT o (GOOGLE_SERVICE_EMAIL/GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY)"
-    );
-  }
-
-  return { client_email, private_key: key };
-}
-
-// ==============================
-// 2) Tipos del payload que envía el juego
-// ==============================
+/* ===================== Tipos ===================== */
 type DetalleItem = {
-  imagenNombre: string;
-  estado: "correcto" | "incorrecto";
-  tiempoSeg: number;
-  seleccionTextos: string[];
-  correctasTextos: string[];
+  preguntaId?: number;
+  enunciado?: string;
+  imagen?: string;
+  imagenNombre?: string;
+  estado?: string;          // "correcto" | "incorrecto"
+  ok?: boolean;
+  tiempoMs?: number;
+  tiempoSeg?: number;
+  seleccion?: Array<number | string>;
+  seleccionTextos?: string[];
+  correctas?: Array<number | string>;
+  correctasTextos?: string[];
 };
 
-type SavePayload = {
+type ResumenCompat = {
+  puntaje?: number;
+  correctas?: number;
+  total?: number;
+  duracionSeg?: number;
+  tiempoSeg?: number;
+  usoTiempo?: boolean | string;
+  agotados?: number;
+};
+
+type Payload = {
+  nombre?: string;
+  apellido?: string;
+  email?: string;
+  resumen?: ResumenCompat;
+  detalle?: DetalleItem[];
+
+  // alias
+  name?: string;
+  surname?: string;
+  mail?: string;
+  score?: number;
+  correctas?: number;
+  total?: number;
+  durationSec?: number;
+  duracionSegundos?: number;
+  usedTimer?: boolean | string;
+  agotados?: number;
+
+  details?: DetalleItem[];
+  respuestas?: DetalleItem[];
+};
+
+type Normalized = {
   nombre: string;
   apellido: string;
   email: string;
-  resumen?: string;
-  detalle: DetalleItem[];
+  puntaje: number;
+  correctas: number;
+  total: number;
+  duracionSeg: number;
+  usoTiempo: boolean | string;
+  agotadoCount: number;
+  imagenes: string[];
+  resumenTexto: string;
+  detalleTexto: string;
 };
 
-// ==============================
-// 3) Helpers
-// ==============================
-function requiredEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Falta la variable de entorno: ${name}`);
-  return v;
+/* ===================== Helpers ===================== */
+function toStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
-function formatResumenHumano(p: SavePayload) {
-  const total = p.detalle.length;
-  const correctas = p.detalle.filter((d) => d.estado === "correcto").length;
-  const totalTiempo = Math.round(
-    p.detalle.reduce((acc, d) => acc + (Number(d.tiempoSeg) || 0), 0)
-  );
+function readServiceCreds(): { client_email: string; private_key: string } {
+  const svc = process.env.GOOGLE_SERVICE_ACCOUNT;
+  if (svc) {
+    try {
+      const json = JSON.parse(svc) as { client_email?: string; private_key?: string };
+      const client_email = json.client_email ?? "";
+      const private_key = (json.private_key ?? "").replace(/\\n/g, "\n");
+      return { client_email, private_key };
+    } catch (e) {
+      console.error("[SAVE] GOOGLE_SERVICE_ACCOUNT no es JSON válido:", e);
+    }
+  }
 
-  // Resumen corto
-  const resumenCorto = `Puntaje: ${correctas}/${total}  •  Tiempo total: ${totalTiempo}s`;
+  const client_email =
+    process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_EMAIL || "";
+  const private_key = (process.env.GOOGLE_PRIVATE_KEY ||
+    process.env.GOOGLE_CLIENT_PRIVATE_KEY ||
+    "").replace(/\\n/g, "\n");
 
-  // Detalle legible (una línea por pregunta)
-  const lineas = p.detalle.map((d, i) => {
-    const sel = d.seleccionTextos.join(", ") || "-";
-    const cor = d.correctasTextos.join(", ") || "-";
-    return `${i + 1}) ${d.imagenNombre} — ${d.estado}. Selección: ${sel}. Correctas: ${cor}. ${d.tiempoSeg}s`;
+  return { client_email, private_key };
+}
+
+async function getSheets() {
+  const { client_email, private_key } = readServiceCreds();
+  if (!client_email || !private_key) {
+    throw new Error(
+      "Faltan credenciales: definí GOOGLE_SERVICE_ACCOUNT o (GOOGLE_CLIENT_EMAIL/GOOGLE_SERVICE_EMAIL + GOOGLE_PRIVATE_KEY)"
+    );
+  }
+  // ✅ Pasamos el GoogleAuth directamente como `auth` a google.sheets(...)
+  const auth = new google.auth.GoogleAuth({
+    credentials: { client_email, private_key },
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-
-  const detalleLegible = lineas.join("\n");
-
-  return { resumenCorto, detalleLegible, correctas, total, totalTiempo };
+  return google.sheets({ version: "v4", auth });
 }
 
-// ==============================
-// 4) GET simple (salud)
-// ==============================
-export async function GET() {
-  return NextResponse.json({ ok: true, route: "/api/save" });
+function normalizeBody(body: unknown): Normalized {
+  const b = (body ?? {}) as Payload;
+
+  const detalleArr: DetalleItem[] = Array.isArray(b.detalle)
+    ? b.detalle
+    : Array.isArray(b.details)
+    ? b.details
+    : Array.isArray(b.respuestas)
+    ? b.respuestas
+    : [];
+
+  const nombre = toStr(b.nombre ?? b.name ?? "");
+  const apellido = toStr(b.apellido ?? b.surname ?? "");
+  const email = toStr(b.email ?? b.mail ?? "");
+
+  const puntaje = Number(b.resumen?.puntaje ?? b.score ?? 0) || 0;
+  const correctas = Number(b.resumen?.correctas ?? b.correctas ?? 0) || 0;
+
+  const totalFromBody = b.resumen?.total ?? b.total;
+  const total =
+    typeof totalFromBody === "number"
+      ? totalFromBody
+      : Number(totalFromBody) || (detalleArr.length || 0);
+
+  const duracionSeg =
+    Number(
+      b.resumen?.duracionSeg ??
+        b.resumen?.tiempoSeg ??
+        b.durationSec ??
+        b.duracionSegundos ??
+        0
+    ) || 0;
+
+  const usoTiempo = b.resumen?.usoTiempo ?? b.usedTimer ?? false;
+  const agotadoCount = Number(b.resumen?.agotados ?? b.agotados ?? 0) || 0;
+
+  const imagenes = detalleArr
+    .map((d) => d.imagenNombre || d.imagen || "")
+    .filter((s) => !!s);
+
+  const resumenTexto =
+    total > 0
+      ? `Puntaje: ${puntaje}/${total} (aciertos: ${correctas}) · Duración: ${duracionSeg}s · Usó tiempo: ${
+          usoTiempo ? "sí" : "no"
+        } · Agotados: ${agotadoCount}`
+      : "";
+
+  const detalleTexto =
+    detalleArr.length > 0
+      ? detalleArr
+          .map((d, i) => {
+            const img = d.imagenNombre || d.imagen || "";
+            const estado = d.estado || (d.ok ? "correcto" : "incorrecto");
+            const sel =
+              Array.isArray(d.seleccionTextos) && d.seleccionTextos.length
+                ? d.seleccionTextos.join(", ")
+                : Array.isArray(d.seleccion)
+                ? d.seleccion.join(", ")
+                : "";
+            const cor =
+              Array.isArray(d.correctasTextos) && d.correctasTextos.length
+                ? d.correctasTextos.join(", ")
+                : Array.isArray(d.correctas)
+                ? d.correctas.join(", ")
+                : "";
+            const t =
+              typeof d.tiempoSeg === "number"
+                ? d.tiempoSeg
+                : typeof d.tiempoMs === "number"
+                ? Math.round(d.tiempoMs / 1000)
+                : 0;
+            return `${i + 1}. ${img} · ${estado} · sel: [${sel}] · ok: [${cor}] · ${t}s`;
+          })
+          .join("\n")
+      : "";
+
+  return {
+    nombre,
+    apellido,
+    email,
+    puntaje,
+    correctas,
+    total,
+    duracionSeg,
+    usoTiempo,
+    agotadoCount,
+    imagenes,
+    resumenTexto,
+    detalleTexto,
+  };
 }
 
-// ==============================
-// 5) POST: guarda en Google Sheets
-// ==============================
-export async function POST(req: NextRequest) {
+/* ===================== Handlers ===================== */
+export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as unknown;
+    const sheets = await getSheets();
 
-    // Validación MUY básica sin libs externas
-    const p = body as Partial<SavePayload>;
-    if (
-      !p ||
-      typeof p.nombre !== "string" ||
-      typeof p.apellido !== "string" ||
-      typeof p.email !== "string" ||
-      !Array.isArray(p.detalle)
-    ) {
-      return NextResponse.json(
-        { ok: false, error: "Payload inválido" },
-        { status: 400 }
-      );
+    let body: unknown = {};
+    try {
+      body = await req.json();
+    } catch {
+      // si no es JSON, guardamos fila mínima igual
     }
 
-    const { client_email, private_key } = getGoogleCreds();
+    const n = normalizeBody(body);
 
-    const auth = new google.auth.JWT({
-      email: client_email,
-      key: private_key,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-
-    const sheets = google.sheets({ version: "v4", auth });
-
-    const SHEET_ID = requiredEnv("SHEET_ID");
-    const SHEET_TAB = process.env.SHEET_TAB || "Respuestas";
-
-    // Armar resumen humano legible (sin user-agent, sin JSON crudo)
-    const { resumenCorto, detalleLegible, correctas, total, totalTiempo } =
-      formatResumenHumano(p as SavePayload);
-
-    // Fila a insertar (podés ajustar el orden/columnas a gusto)
-    // Fecha ISO, Nombre, Apellido, Email, Puntaje, TiempoTotal(s), ResumenCorto, Detalle (multilínea)
-    const nowIso = new Date().toISOString();
-    const values: (string | number)[][] = [
+    const values = [
       [
-        nowIso,
-        p.nombre,
-        p.apellido,
-        p.email,
-        `${correctas}/${total}`,
-        totalTiempo,
-        p.resumen || resumenCorto,
-        detalleLegible,
+        new Date().toISOString(),
+        n.nombre,
+        n.apellido,
+        n.email,
+        `${n.puntaje}/${n.total}`,
+        n.correctas,
+        n.total,
+        n.duracionSeg,
+        n.usoTiempo ? "sí" : "no",
+        n.agotadoCount,
+        n.imagenes.join(", "),
+        n.resumenTexto,
+        n.detalleTexto,
       ],
-    ];
+    ] as (string | number)[][];
+
+    const spreadsheetId = process.env.SHEET_ID!;
+    const tab = process.env.SHEET_TAB || "Respuestas";
 
     await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!A1`,
+      spreadsheetId,
+      range: `${tab}!A1`,
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: { values },
     });
 
+    console.log("[SAVE] OK fila escrita", {
+      email: n.email,
+      puntaje: `${n.puntaje}/${n.total}`,
+      imgs: n.imagenes.length,
+    });
+
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : "Error inesperado en /api/save";
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error("Sheets error:", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
+}
+
+export async function GET() {
+  const has = (k: string) =>
+    !!(process.env[k] && String(process.env[k]).length > 0);
+  return NextResponse.json({
+    ok: true,
+    route: "/api/save",
+    env: {
+      SHEET_ID: has("SHEET_ID"),
+      SHEET_TAB: has("SHEET_TAB"),
+      GOOGLE_SERVICE_ACCOUNT: has("GOOGLE_SERVICE_ACCOUNT"),
+      GOOGLE_CLIENT_EMAIL: has("GOOGLE_CLIENT_EMAIL"),
+      GOOGLE_PRIVATE_KEY: has("GOOGLE_PRIVATE_KEY"),
+    },
+  });
 }
