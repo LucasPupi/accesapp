@@ -18,6 +18,7 @@ function shuffle<T>(arr: T[]) {
   }
   return arr;
 }
+const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export default function JugarPage() {
   // Orden aleatorio de preguntas
@@ -31,9 +32,78 @@ export default function JugarPage() {
   const qIndex = order[idx];
   const q = preguntas[qIndex];
 
+  // --- Datos del jugador (modal de inicio) ---
+  const [gateOpen, setGateOpen] = useState(false); // arranca cerrado: pide datos
+  const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
+  const [email, setEmail] = useState("");
+  const canStart = Boolean(nombre.trim() && apellido.trim() && emailOk(email));
+
+  // --- Tiempos / auditoría ---
+  const quizStartedAt = useRef<number>(Date.now());
+  const preguntaInicio = useRef<number>(Date.now());
+  type RespuestaAudit = {
+    preguntaId: string | number;
+    seleccion: number[];
+    correctas: number[];
+    ok: boolean;
+    tiempoMs: number;
+    agotado: boolean;
+  };
+  const [auditoria, setAuditoria] = useState<RespuestaAudit[]>([]);
+  const [sent, setSent] = useState(false);
+
+  // Convierte la auditoría "cruda" (índices) a una versión legible para Excel/Sheets
+function buildReadableAudit(raw: {
+  preguntaId: string | number;
+  seleccion: number[];
+  correctas: number[];
+  ok: boolean;
+  tiempoMs: number;
+  agotado: boolean;
+}[]) {
+  return raw.map((row) => {
+    const pq = preguntas.find(p => p.id === row.preguntaId);
+    const enunciado = pq?.enunciado ?? "";
+    const imagen = pq?.imagen ?? "";
+    const imagenNombre = imagen.split("/").pop() ?? "";
+    const opciones = pq?.opciones ?? [];
+
+    const seleccionTextos = row.seleccion.map(i => opciones[i]).filter(Boolean);
+    const correctasTextos = row.correctas.map(i => opciones[i]).filter(Boolean);
+
+    const estado = row.agotado ? "tiempo" : (row.ok ? "correcto" : "incorrecto");
+
+    return {
+      // Identificación clara
+      preguntaId: row.preguntaId,
+      enunciado,
+      imagen,
+      imagenNombre,
+
+      // Resumen humano
+      estado,                     // "correcto" | "incorrecto" | "tiempo"
+      ok: row.ok,
+      tiempoMs: row.tiempoMs,
+      tiempoSeg: Math.round(row.tiempoMs / 1000),
+
+      // Detalle
+      seleccionIndices: row.seleccion,
+      seleccionTextos,
+      correctasIndices: row.correctas,
+      correctasTextos,
+
+      // Si querés guardar todas las opciones de la pregunta, descomentá:
+      // opcionesTodas: opciones,
+    };
+  });
+}
+
+
   // Estados por pregunta
+  // Nota: al inicio dejamos en pausa si gate no está abierto
   const [timeLeft, setTimeLeft] = useState(q.tiempo);
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(true);
   const [limitDisabled, setLimitDisabled] = useState(false);
   const [selection, setSelection] = useState<number[]>([]);
   const [timedOut, setTimedOut] = useState(false);
@@ -59,13 +129,18 @@ export default function JugarPage() {
   // Reset por pregunta
   useEffect(() => {
     setTimeLeft(q.tiempo);
-    setPaused(false);
+    setPaused(!gateOpen); // si el gate no está abierto, quedamos en pausa
     setLimitDisabled(false);
     setSelection([]);
     setTimedOut(false);
     setCanNext(false);
     setFeedback("");
-  }, [idx, q.tiempo]);
+  }, [idx, q.tiempo, gateOpen]);
+
+  // Marca inicio de cada pregunta (para medir tiempo por pregunta)
+  useEffect(() => {
+    preguntaInicio.current = Date.now();
+  }, [idx]);
 
   const handleTimeout = useCallback(() => {
     setTimedOut(true);
@@ -73,8 +148,20 @@ export default function JugarPage() {
     setCanNext(true);
     const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
     setFeedback(`⏳ Tiempo agotado. Correctas: ${correctTexts}. ${q.explicacion}`);
+
+    // auditoría por timeout
+    const durMs = Date.now() - preguntaInicio.current;
+    setAuditoria(a => [...a, {
+      preguntaId: q.id,
+      seleccion: selection,
+      correctas: q.correctas,
+      ok: false,
+      tiempoMs: durMs,
+      agotado: true,
+    }]);
+
     setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
-  }, [q]);
+  }, [q, selection]);
 
   // Timer
   useEffect(() => {
@@ -103,6 +190,17 @@ export default function JugarPage() {
 
     if (ok) setScore(s => s + 1);
 
+    // auditoría confirmada
+    const durMs = Date.now() - preguntaInicio.current;
+    setAuditoria(a => [...a, {
+      preguntaId: q.id,
+      seleccion: selection,
+      correctas: q.correctas,
+      ok,
+      tiempoMs: durMs,
+      agotado: false,
+    }]);
+
     const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
     const chosenTexts = selection.map(i => q.opciones[i]).join(", ");
     setFeedback(
@@ -126,14 +224,108 @@ export default function JugarPage() {
     setOrder(newOrder);
     setIdx(0); setScore(0); setShowResults(false);
     const first = preguntas[newOrder[0]];
-    setTimeLeft(first.tiempo); setPaused(false); setLimitDisabled(false);
+    setTimeLeft(first.tiempo); setPaused(!gateOpen); setLimitDisabled(false);
     setSelection([]); setTimedOut(false); setCanNext(false); setFeedback("");
+
+    // reset auditoría/envío
+    setAuditoria([]);
+    quizStartedAt.current = Date.now();
+    preguntaInicio.current = Date.now();
+    setSent(false);
   }
+
+  // Envío a Google Sheets al finalizar (ahora con auditoría legible)
+useEffect(() => {
+  if (!showResults || sent) return;
+
+  const tiempoSegundos = Math.max(
+    0,
+    Math.round((Date.now() - quizStartedAt.current) / 1000)
+  );
+
+  // 1) Transformamos la auditoría a algo entendible
+  const readable = buildReadableAudit(auditoria);
+  // 2) Armamos el payload
+  const payload = {
+    nombre, apellido, email,
+    score,
+    total: preguntas.length,
+    tiempoSegundos,
+
+    // 👇 Ahora mandamos la versión legible
+    respuestas: readable,
+
+    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : ""
+  };
+
+  fetch("/api/save", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  })
+    .then(() => setSent(true))
+    .catch((err) => {
+      console.error("Error guardando en Sheets:", err);
+    });
+}, [showResults, sent, nombre, apellido, email, score, auditoria]);
+
+
+  /* --- UI: modal de datos (bloquea hasta Empezar) --- */
+  const gateModal = !gateOpen && (
+    <div style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,.35)",
+      display:"grid", placeItems:"center", zIndex:50
+    }}>
+      <div style={{
+        width:"min(560px,92vw)", background:"#fff",
+        border:"1px solid rgba(0,0,0,.06)", borderRadius:18,
+        boxShadow:"0 28px 80px -30px rgba(0,0,0,.35)", padding:"22px"
+      }}>
+        <h2 style={{fontSize:22, fontWeight:800, color:"#162126"}}>Antes de empezar</h2>
+        <p style={{color:"#334155", marginTop:6}}>Completá tus datos para guardar tu puntaje.</p>
+
+        <div style={{display:"grid", gap:12, marginTop:16}}>
+          <input placeholder="Nombre" value={nombre} onChange={e=>setNombre(e.target.value)}
+                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
+          <input placeholder="Apellido" value={apellido} onChange={e=>setApellido(e.target.value)}
+                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
+          <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}
+                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
+        </div>
+
+        <div style={{display:"flex", gap:10, marginTop:16}}>
+          <button
+            onClick={() => {
+              if (!canStart) return;
+              setGateOpen(true);
+              setPaused(false); // arranca el timer
+              quizStartedAt.current = Date.now();
+              preguntaInicio.current = Date.now();
+            }}
+            disabled={!canStart}
+            className={canStart ? "btn-confirm enabled" : "btn-confirm"}
+            style={{flex:1}}
+          >
+            Empezar
+          </button>
+
+          <button onClick={() => history.back()} className="btn-next" style={{flex:1}}>
+            Cancelar
+          </button>
+        </div>
+
+        <p style={{fontSize:12, color:"#64748b", marginTop:10}}>
+          Al continuar aceptás que registremos tus datos y respuestas con fines educativos.
+        </p>
+      </div>
+    </div>
+  );
 
   /* Resultados */
   if (showResults) {
     return (
       <main id="contenido" className="q-wrap">
+        {gateModal}
         <section className="q-card">
           <h1 style={{fontSize:22, fontWeight:800, color:"#2a2a2a"}}>Resultados</h1>
           <p className="q-sub">Puntaje: <strong style={{color:"#111827"}}>{score}</strong> / {preguntas.length}</p>
@@ -165,6 +357,8 @@ export default function JugarPage() {
   /* Pregunta */
   return (
     <main id="contenido" className="q-wrap">
+      {gateModal}
+
       {/* CARD 1: header + progreso */}
       <section className="q-card q-head">
         <Link href="/" aria-label="Volver" style={{color:"#4b5563"}}>←</Link>
