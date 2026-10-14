@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { preguntas } from "@/data/preguntas";
 
 // Se calculan solos: si agregás preguntas en src/data/preguntas.ts, el inicio se actualiza.
@@ -10,18 +9,6 @@ export default function Home() {
   return (
     <main id="contenido" className="home-wrap">
       <section className="hero-card">
-        {/* Foto de portada (decorativa) */}
-        <div className="hero-photo">
-          <Image
-            src="/fotos/ciego_exterior.webp"
-            alt=""
-            width={740}
-            height={493}
-            sizes="(max-width: 680px) 100vw, 640px"
-            priority
-          />
-        </div>
-
         <div className="hero-body">
           {/* Icono redondo */}
           <div className="hero-icon" aria-hidden="true">

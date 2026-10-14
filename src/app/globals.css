@@ -108,10 +108,15 @@ input:focus-visible {
 /* ==========================================================
    PORTADA
    ========================================================== */
+/* Fondo: foto real del campus de la UNM, oscurecida para que resalte la tarjeta */
 .home-wrap {
   min-height: 100svh;
   display: grid; place-items: center;
   padding: 40px 16px;
+  background:
+    linear-gradient(rgba(10, 20, 14, .55), rgba(10, 20, 14, .65)),
+    url("/fotos/bg.webp") center / cover no-repeat;
+  background-color: #1d2a22;
 }
 
 .hero-card {
@@ -120,24 +125,19 @@ input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 28px;
   overflow: hidden;
-  box-shadow: 0 40px 80px -48px rgba(23, 32, 27, .35);
-}
-
-.hero-photo img {
-  width: 100%; height: 240px; object-fit: cover;
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, .6);
 }
 
 .hero-body {
-  padding: 0 40px 40px;
+  padding: 44px 40px 40px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
 
 .hero-icon {
-  width: 76px; height: 76px; margin-top: -38px;
-  border-radius: 999px; border: 4px solid var(--surface);
-  background: var(--green); color: #fff;
+  width: 76px; height: 76px;
+  border-radius: 999px;
+  background: var(--green-tint); color: var(--green);
   display: grid; place-items: center;
-  position: relative;
 }
 
 .hero-title {
@@ -168,8 +168,7 @@ input:focus-visible {
 
 @media (max-width: 520px) {
   .home-wrap { padding: 16px; }
-  .hero-photo img { height: 200px; }
-  .hero-body { padding: 0 22px 28px; }
+  .hero-body { padding: 32px 22px 28px; }
 }
 
 /* ==========================================================
