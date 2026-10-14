@@ -1,9 +1,10 @@
 export interface Pregunta {
   id: number;
   imagen: string;
+  alt: string;          // descripción de la imagen para lectores de pantalla
   enunciado: string;
   opciones: string[];
-  correctas: number[];   // índice de la opción correcta
+  correctas: number[];   // índices de las opciones correctas (0 = física, 1 = comunicacional, 2 = actitudinal)
   tiempo: number;     // segundos por pregunta
   explicacion: string;
 }
@@ -12,6 +13,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 1,
     imagen: "/fotos/ascensor.webp",
+    alt: "Pasillo con dos ascensores de acero inoxidable: uno con las puertas cerradas y otro abierto con la cabina vacía e iluminada. Entre ambos hay dos botoneras pequeñas con dos botones cada una, sin otra señalización visible.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -25,6 +27,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 2,
     imagen: "/fotos/baños.webp",
+    alt: "Baño público con mesada de granito negro y bacha, dos mingitorios separados por paneles metálicos y cubículos estrechos de acero con inodoros. El piso es negro y la mesada está sobre un escalón.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -38,6 +41,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 3,
     imagen: "/fotos/ciego_bondi.webp",
+    alt: "Interior de un colectivo lleno de gente. En el centro, una persona sentada sostiene un bastón blanco y mira al frente, sola y seria. A su alrededor, varias personas paradas y sentadas conversan y se ríen entre ellas sin dirigirse a ella.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -51,6 +55,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 4,
     imagen: "/fotos/ciego_exterior.webp",
+    alt: "Campus al aire libre con edificios, montañas al fondo y senderos de cemento lisos entre canteros de pasto. A la izquierda, un hombre con anteojos oscuros camina entre plantas altas tanteando con un bastón blanco, fuera del sendero.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -64,6 +69,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 5,
     imagen: "/fotos/darin.webp",
+    alt: "Aula a oscuras con niñas y niños sentados de espaldas mirando una pantalla. En la pantalla se proyecta una película: un primer plano de un hombre de barba, de traje, fumando. No se ven subtítulos. Al fondo, una docente de pie junto a una biblioteca.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -77,6 +83,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 6,
     imagen: "/fotos/proyector.webp",
+    alt: "Sala oscura con un proyector colgado del techo. Un hombre de espaldas, con las manos atrás, mira una pantalla con una diapositiva de texto pequeño. Adelante hay sillas y mesas vacías y una computadora portátil en un atril.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -90,6 +97,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 7,
     imagen: "/fotos/signo_discapacidad.webp",
+    alt: "Estacionamiento con piso de piedras sueltas de canto rodado. Junto a un auto estacionado hay un cuadrado azul pintado sobre las piedras con el símbolo blanco de una persona en silla de ruedas.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
@@ -103,6 +111,7 @@ export const preguntas: Pregunta[] = [
   {
     id: 8,
     imagen: "/fotos/silla_ruedas.webp",
+    alt: "Cocina luminosa de una oficina o casa. Un hombre en silla de ruedas sostiene una taza y mira a un grupo de tres personas paradas que charlan y se ríen junto a una mesada alta con una cafetera.",
     enunciado: "¿Qué barreras se visualizan en la imagen?",
     opciones: [
       "Barrera física",
