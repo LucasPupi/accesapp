@@ -46,6 +46,7 @@ type Payload = {
   total?: number;
   durationSec?: number;
   duracionSegundos?: number;
+  tiempoSegundos?: number; // nombre que usa el cliente (jugar/page.tsx)
 
   details?: DetalleItem[];
   respuestas?: DetalleItem[];
@@ -63,8 +64,13 @@ type Normalized = {
 };
 
 /* ========= Helpers ========= */
+// Recorta textos para que nadie pueda llenar la planilla con datos gigantes.
+const MAX_TEXTO = 200;
+const MAX_RESPUESTAS = 50;
+
 function toStr(v: unknown): string {
-  return typeof v === "string" ? v : v == null ? "" : String(v);
+  const s = typeof v === "string" ? v : v == null ? "" : String(v);
+  return s.trim().slice(0, MAX_TEXTO);
 }
 
 function basename(path: string): string {
@@ -115,13 +121,15 @@ async function getSheets() {
 function normalizeBody(body: unknown): Normalized {
   const b = (body ?? {}) as Payload;
 
-  const detalle: DetalleItem[] = Array.isArray(b.detalle)
-    ? b.detalle
-    : Array.isArray(b.details)
-    ? b.details
-    : Array.isArray(b.respuestas)
-    ? b.respuestas
-    : [];
+  const detalle: DetalleItem[] = (
+    Array.isArray(b.detalle)
+      ? b.detalle
+      : Array.isArray(b.details)
+      ? b.details
+      : Array.isArray(b.respuestas)
+      ? b.respuestas
+      : []
+  ).slice(0, MAX_RESPUESTAS);
 
   const nombre = toStr(b.nombre ?? b.name ?? "");
   const apellido = toStr(b.apellido ?? b.surname ?? "");
@@ -142,6 +150,7 @@ function normalizeBody(body: unknown): Normalized {
         b.resumen?.tiempoSeg ??
         b.durationSec ??
         b.duracionSegundos ??
+        b.tiempoSegundos ??
         0
     ) || 0;
 
@@ -155,12 +164,18 @@ function buildDetalleResumen(detalle: DetalleItem[]): string {
       const idx = i + 1;
       const file =
         d.imagenNombre || (d.imagen ? basename(d.imagen) : `pregunta_${d.preguntaId ?? idx}`);
+      // Si el cliente mandó un estado explícito ("correcto" | "incorrecto" | "tiempo")
+      // lo respetamos; si no, lo deducimos de `ok`.
       const estado =
-        typeof d.ok === "boolean"
+        d.estado === "tiempo"
+          ? "tiempo agotado"
+          : d.estado
+          ? d.estado
+          : typeof d.ok === "boolean"
           ? d.ok
             ? "correcto"
             : "incorrecto"
-          : d.estado || "—";
+          : "—";
       const sel =
         Array.isArray(d.seleccionTextos) && d.seleccionTextos.length
           ? d.seleccionTextos.join(", ")
@@ -228,22 +243,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    // El detalle del error queda en los logs de Vercel; al público solo le decimos que falló.
     console.error("Sheets error:", msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
-}
-
-export async function GET() {
-  const has = (k: string) => !!(process.env[k] && String(process.env[k]).length > 0);
-  return NextResponse.json({
-    ok: true,
-    route: "/api/save",
-    env: {
-      SHEET_ID: has("SHEET_ID"),
-      SHEET_TAB: has("SHEET_TAB"),
-      GOOGLE_SERVICE_ACCOUNT: has("GOOGLE_SERVICE_ACCOUNT"),
-      GOOGLE_CLIENT_EMAIL: has("GOOGLE_CLIENT_EMAIL"),
-      GOOGLE_PRIVATE_KEY: has("GOOGLE_PRIVATE_KEY"),
-    },
-  });
 }

@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { preguntas } from "@/data/preguntas";
+
+// Se calculan solos: si agregás preguntas en src/data/preguntas.ts, el inicio se actualiza.
+const cantidadPreguntas = preguntas.length;
+const cantidadCategorias = preguntas[0]?.opciones.length ?? 3;
 
 export default function Home() {
   return (
@@ -26,26 +31,26 @@ export default function Home() {
         </p>
 
         {/* Métricas */}
-        <div className="metrics" aria-label="Resumen">
-          <div className="metric">
-            <strong>8</strong>
+        <ul className="metrics" aria-label="Resumen de la actividad">
+          <li className="metric">
+            <strong>{cantidadPreguntas}</strong>
             <span>Preguntas</span>
-          </div>
-          <div className="metric">
+          </li>
+          <li className="metric">
             <strong>~5</strong>
             <span>Minutos</span>
-          </div>
-          <div className="metric">
-            <strong>3</strong>
+          </li>
+          <li className="metric">
+            <strong>{cantidadCategorias}</strong>
             <span>Categorías</span>
-          </div>
-        </div>
+          </li>
+        </ul>
 
         {/* CTA */}
         <div className="cta-row">
           <Link href="/jugar" className="btn btn--start">
             {/* icono rectángulo con “play” */}
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="2.5" y="5" width="19" height="14" rx="3" fill="currentColor" opacity=".25"/>
               <path d="M10 9l5 3-5 3V9Z" fill="currentColor"/>
             </svg>

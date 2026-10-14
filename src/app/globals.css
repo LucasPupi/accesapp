@@ -626,3 +626,112 @@ body::after{
 
 /* Si algún wrapper tenía fondo sólido, lo dejo transparente */
 .bg-app, .home-wrap { background: transparent !important; }
+
+
+/* ==========================================================
+   ACCESIBILIDAD Y COMPONENTES DEL JUEGO
+   (agregado en la revisión de accesibilidad)
+   ========================================================== */
+
+/* Tipografía: la fuente Geist se cargaba pero nunca se aplicaba */
+body {
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+/* Foco visible y consistente para quien navega con teclado.
+   (.btn usa "all: unset", que borraba el contorno del botón INICIAR) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+.btn:focus-visible {
+  outline: 3px solid #0f7a43;
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+.option:focus-within {
+  outline: 3px solid #0f7a43;
+  outline-offset: 2px;
+}
+/* Elementos que reciben foco desde el código (títulos, mensaje de respuesta):
+   sin contorno salvo que se llegue con teclado */
+[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+
+/* Enlace "Saltar al contenido" */
+.skip-link:focus { z-index: 100; text-decoration: none; }
+
+/* Métricas del inicio como lista (sin viñetas) */
+ul.metrics { list-style: none; padding: 0; }
+
+/* ---------- Ventana "Antes de empezar" ---------- */
+.gate-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, .55);
+}
+.gate-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100svh - 32px); overflow-y: auto;
+  background: #fff; color: #162126;
+  border: 1px solid rgba(0, 0, 0, .06); border-radius: 18px;
+  box-shadow: 0 28px 80px -30px rgba(0, 0, 0, .35);
+  padding: 22px;
+}
+.gate-title { font-size: 22px; font-weight: 800; color: #162126; margin: 0; }
+.gate-desc { color: #334155; margin-top: 6px; }
+.gate-form { display: grid; gap: 14px; margin-top: 16px; }
+.gate-actions { display: flex; gap: 10px; margin-top: 4px; }
+.gate-note { font-size: 13px; color: #475569; margin-top: 12px; }
+
+.field { display: grid; gap: 6px; }
+.field label { font-weight: 600; color: #1f2937; }
+.field input {
+  height: 46px; padding: 0 12px;
+  border-radius: 12px; border: 1px solid #94a3b8;
+  font: inherit; color: #0b1220; background: #fff;
+}
+.field input[aria-invalid="true"] { border-color: #b91c1c; border-width: 2px; }
+.field-error { color: #b91c1c; font-size: 14px; font-weight: 600; }
+
+/* ---------- Pantalla de preguntas ---------- */
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #374151; font-weight: 600; text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+
+.timer-controls { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.time-paused { font-weight: 600; color: #92400e; }
+.q-timer .btn-sm { font: inherit; cursor: pointer; }
+.q-timer .btn-sm[aria-pressed="true"] { background: #fef3c7; border-color: #f59e0b; }
+.q-timer .btn-sm:disabled { color: #9ca3af; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.q-media .media { margin: 0; }
+
+.q-options fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.q-options fieldset:disabled .option { opacity: .75; }
+.option { cursor: pointer; }
+.option span { color: #0b1220; font-weight: 500; }
+
+.btn-confirm, .btn-next { font: inherit; font-weight: 600; text-decoration: none; }
+.btn-next:disabled { color: #9ca3af; cursor: not-allowed; }
+
+.feedback p + p { margin-top: 8px; }
+.feedback-title { font-weight: 800; font-size: 17px; }
+.feedback-text { font-weight: 400; line-height: 1.6; }
+
+/* ---------- Resultados ---------- */
+.results-title { font-size: 22px; font-weight: 800; color: #2a2a2a; }
+.results-score { color: #111827; }
+.save-status { margin-top: 12px; color: #1f2937; font-weight: 500; min-height: 1.5em; }
+
+/* ---------- Menos movimiento para quien lo pide en su sistema ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

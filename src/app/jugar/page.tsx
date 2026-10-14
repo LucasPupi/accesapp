@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preguntas } from "@/data/preguntas";
 
-/* Helpers */
+/* ========= Helpers ========= */
 function formatTime(total: number) {
   const m = Math.floor(total / 60).toString().padStart(2, "0");
   const s = (total % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
+
 function shuffle<T>(arr: T[]) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -18,429 +19,534 @@ function shuffle<T>(arr: T[]) {
   }
   return arr;
 }
-const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-export default function JugarPage() {
-  // Orden aleatorio de preguntas
-  const [order, setOrder] = useState<number[]>(
-    () => shuffle([...Array(preguntas.length).keys()])
-  );
-  const [idx, setIdx] = useState(0);
-  const [score, setScore] = useState(0);
-  const [showResults, setShowResults] = useState(false);
+const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-  const qIndex = order[idx];
-  const q = preguntas[qIndex];
+/** Cuántos segundos antes del final avisamos al lector de pantalla. */
+const AVISO_SEGUNDOS = 10;
 
-  // --- Datos del jugador (modal de inicio) ---
-  const [gateOpen, setGateOpen] = useState(false); // arranca cerrado: pide datos
-  const [nombre, setNombre] = useState("");
-  const [apellido, setApellido] = useState("");
-  const [email, setEmail] = useState("");
-  const canStart = Boolean(nombre.trim() && apellido.trim() && emailOk(email));
+/* ========= Tipos ========= */
+type Resultado = "ok" | "bad" | "time";
 
-  // --- Tiempos / auditoría ---
-  const quizStartedAt = useRef<number>(Date.now());
-  const preguntaInicio = useRef<number>(Date.now());
-  type RespuestaAudit = {
-    preguntaId: string | number;
-    seleccion: number[];
-    correctas: number[];
-    ok: boolean;
-    tiempoMs: number;
-    agotado: boolean;
-  };
-  const [auditoria, setAuditoria] = useState<RespuestaAudit[]>([]);
-  const [sent, setSent] = useState(false);
+type Respuesta = {
+  resultado: Resultado;
+  seleccionTextos: string[];
+};
 
-  // Convierte la auditoría "cruda" (índices) a una versión legible para Excel/Sheets
-function buildReadableAudit(raw: {
-  preguntaId: string | number;
+type RespuestaAudit = {
+  preguntaId: number;
   seleccion: number[];
   correctas: number[];
   ok: boolean;
   tiempoMs: number;
   agotado: boolean;
-}[]) {
+};
+
+type EstadoGuardado = "idle" | "saving" | "ok" | "error";
+
+/** Convierte la auditoría "cruda" (índices) a una versión legible para la planilla. */
+function buildReadableAudit(raw: RespuestaAudit[]) {
   return raw.map((row) => {
-    const pq = preguntas.find(p => p.id === row.preguntaId);
-    const enunciado = pq?.enunciado ?? "";
+    const pq = preguntas.find((p) => p.id === row.preguntaId);
     const imagen = pq?.imagen ?? "";
-    const imagenNombre = imagen.split("/").pop() ?? "";
     const opciones = pq?.opciones ?? [];
-
-    const seleccionTextos = row.seleccion.map(i => opciones[i]).filter(Boolean);
-    const correctasTextos = row.correctas.map(i => opciones[i]).filter(Boolean);
-
-    const estado = row.agotado ? "tiempo" : (row.ok ? "correcto" : "incorrecto");
-
     return {
-      // Identificación clara
       preguntaId: row.preguntaId,
-      enunciado,
+      enunciado: pq?.enunciado ?? "",
       imagen,
-      imagenNombre,
-
-      // Resumen humano
-      estado,                     // "correcto" | "incorrecto" | "tiempo"
+      imagenNombre: imagen.split("/").pop() ?? "",
+      estado: row.agotado ? "tiempo" : row.ok ? "correcto" : "incorrecto",
       ok: row.ok,
       tiempoMs: row.tiempoMs,
       tiempoSeg: Math.round(row.tiempoMs / 1000),
-
-      // Detalle
       seleccionIndices: row.seleccion,
-      seleccionTextos,
+      seleccionTextos: row.seleccion.map((i) => opciones[i]).filter(Boolean),
       correctasIndices: row.correctas,
-      correctasTextos,
-
-      // Si querés guardar todas las opciones de la pregunta, descomentá:
-      // opcionesTodas: opciones,
+      correctasTextos: row.correctas.map((i) => opciones[i]).filter(Boolean),
     };
   });
 }
 
+export default function JugarPage() {
+  /* ---------- Orden y progreso ---------- */
+  const [order, setOrder] = useState<number[]>(() =>
+    shuffle([...Array(preguntas.length).keys()])
+  );
+  const [idx, setIdx] = useState(0);
+  const [score, setScore] = useState(0);
+  const [showResults, setShowResults] = useState(false);
 
-  // Estados por pregunta
-  // Nota: al inicio dejamos en pausa si gate no está abierto
+  const q = preguntas[order[idx]];
+  const multi = q.correctas.length > 1;
+  const total = preguntas.length;
+
+  /* ---------- Datos del jugador (ventana inicial) ---------- */
+  const [gateOpen, setGateOpen] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
+  const [email, setEmail] = useState("");
+  const [intentoEnviar, setIntentoEnviar] = useState(false);
+  const nombreRef = useRef<HTMLInputElement>(null);
+  const apellidoRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  const errores = {
+    nombre: nombre.trim() ? "" : "Escribí tu nombre.",
+    apellido: apellido.trim() ? "" : "Escribí tu apellido.",
+    email: !email.trim()
+      ? "Escribí tu email."
+      : emailOk(email)
+      ? ""
+      : "El email no parece válido (ejemplo: nombre@correo.com).",
+  };
+
+  /* ---------- Estado de la pregunta actual ---------- */
   const [timeLeft, setTimeLeft] = useState(q.tiempo);
-  const [paused, setPaused] = useState(true);
+  const [paused, setPaused] = useState(false);
   const [limitDisabled, setLimitDisabled] = useState(false);
   const [selection, setSelection] = useState<number[]>([]);
-  const [timedOut, setTimedOut] = useState(false);
-  const [canNext, setCanNext] = useState(false);
-  const [feedback, setFeedback] = useState("");
+  const [respuesta, setRespuesta] = useState<Respuesta | null>(null);
+  const [aviso, setAviso] = useState(""); // mensajes para lectores de pantalla
+
+  const answered = respuesta !== null;
+
+  /* ---------- Tiempos / auditoría ---------- */
+  const quizStartedAt = useRef<number>(Date.now());
+  const preguntaInicio = useRef<number>(Date.now());
+  const [auditoria, setAuditoria] = useState<RespuestaAudit[]>([]);
+  const [guardado, setGuardado] = useState<EstadoGuardado>("idle");
+
+  /* ---------- Referencias para mover el foco ---------- */
+  const tituloRef = useRef<HTMLHeadingElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
+  const resultadosRef = useRef<HTMLHeadingElement>(null);
 
-  const multi = q.correctas.length > 1;
+  // Opciones barajadas (manteniendo el índice real)
+  const opcionesShuf = useMemo(
+    () => shuffle(q.opciones.map((texto, i) => ({ texto, i }))),
+    [q]
+  );
 
-  // Opciones barajadas (manteniendo índice real)
-  const opcionesShuf = useMemo(() => {
-    const base = q.opciones.map((texto, i) => ({ texto, i }));
-    return shuffle([...base]);
-  }, [q]);
+  const progress = showResults ? 100 : Math.round(((idx + 1) / total) * 100);
 
-  const progress = showResults ? 100 : Math.round(((idx + 1) / preguntas.length) * 100);
-
-  const feedbackType =
-    timedOut ? "time" :
-    feedback.startsWith("✅") ? "ok" :
-    feedback.startsWith("❌") ? "bad" : "";
-
-  // Reset por pregunta
+  /* ---------- Reset al cambiar de pregunta ---------- */
   useEffect(() => {
     setTimeLeft(q.tiempo);
-    setPaused(!gateOpen); // si el gate no está abierto, quedamos en pausa
+    setPaused(false);
     setLimitDisabled(false);
     setSelection([]);
-    setTimedOut(false);
-    setCanNext(false);
-    setFeedback("");
-  }, [idx, q.tiempo, gateOpen]);
-
-  // Marca inicio de cada pregunta (para medir tiempo por pregunta)
-  useEffect(() => {
+    setRespuesta(null);
+    setAviso("");
     preguntaInicio.current = Date.now();
-  }, [idx]);
+  }, [idx, q.tiempo]);
 
-  const handleTimeout = useCallback(() => {
-    setTimedOut(true);
-    setPaused(true);
-    setCanNext(true);
-    const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
-    setFeedback(`⏳ Tiempo agotado. Correctas: ${correctTexts}. ${q.explicacion}`);
-
-    // auditoría por timeout
-    const durMs = Date.now() - preguntaInicio.current;
-    setAuditoria(a => [...a, {
-      preguntaId: q.id,
-      seleccion: selection,
-      correctas: q.correctas,
-      ok: false,
-      tiempoMs: durMs,
-      agotado: true,
-    }]);
-
-    setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
-  }, [q, selection]);
-
-  // Timer
+  // Al empezar y al pasar de pregunta llevamos el foco al título
+  // para que quien usa lector de pantalla sepa que cambió.
   useEffect(() => {
-    if (limitDisabled || paused || timedOut || showResults) return;
-    if (timeLeft <= 0) { handleTimeout(); return; }
-    const id = setInterval(() => setTimeLeft(t => t - 1), 1000);
-    return () => clearInterval(id);
-  }, [limitDisabled, paused, timedOut, showResults, timeLeft, handleTimeout]);
+    if (gateOpen && !showResults) tituloRef.current?.focus();
+  }, [idx, showResults, gateOpen]);
+
+  /* ---------- Registrar una respuesta ---------- */
+  const registrar = useCallback(
+    (resultado: Resultado, sel: number[]) => {
+      setAuditoria((a) => [
+        ...a,
+        {
+          preguntaId: q.id,
+          seleccion: sel,
+          correctas: q.correctas,
+          ok: resultado === "ok",
+          tiempoMs: Date.now() - preguntaInicio.current,
+          agotado: resultado === "time",
+        },
+      ]);
+      setRespuesta({
+        resultado,
+        seleccionTextos: sel.map((i) => q.opciones[i]),
+      });
+    },
+    [q]
+  );
+
+  // Cuando aparece el mensaje de respuesta le pasamos el foco:
+  // así se ve en pantalla y el lector de pantalla lo lee completo.
+  useEffect(() => {
+    if (!respuesta || !feedbackRef.current) return;
+    feedbackRef.current.focus({ preventScroll: true });
+    const menosMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    feedbackRef.current.scrollIntoView({
+      behavior: menosMovimiento ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [respuesta]);
+
+  // Al terminar, el foco va al título "Resultados"
+  useEffect(() => {
+    if (showResults) resultadosRef.current?.focus();
+  }, [showResults]);
+
+  /* ---------- Timer ---------- */
+  const timerActivo = gateOpen && !paused && !limitDisabled && !answered && !showResults;
+
+  // Guardamos la selección en una ref para que marcar opciones no reinicie el segundo en curso.
+  const selectionRef = useRef<number[]>([]);
+  selectionRef.current = selection;
+
+  useEffect(() => {
+    if (!timerActivo) return;
+    if (timeLeft <= 0) {
+      registrar("time", selectionRef.current);
+      return;
+    }
+    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [timerActivo, timeLeft, registrar]);
+
+  // Aviso hablado cuando queda poco tiempo
+  useEffect(() => {
+    if (timerActivo && timeLeft === AVISO_SEGUNDOS) {
+      setAviso(`Quedan ${AVISO_SEGUNDOS} segundos.`);
+    }
+  }, [timerActivo, timeLeft]);
+
+  /* ---------- Acciones ---------- */
+  function empezar(e: React.FormEvent) {
+    e.preventDefault();
+    setIntentoEnviar(true);
+    if (errores.nombre) return nombreRef.current?.focus();
+    if (errores.apellido) return apellidoRef.current?.focus();
+    if (errores.email) return emailRef.current?.focus();
+
+    setGateOpen(true);
+    quizStartedAt.current = Date.now();
+    preguntaInicio.current = Date.now();
+  }
 
   function toggleSelect(i: number) {
-    setSelection(prev =>
-      prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]
-    );
+    setSelection((prev) => (prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]));
   }
 
   function handleConfirm() {
-    if (selection.length === 0) {
-      setFeedback("Elegí al menos una opción antes de confirmar.");
-      return;
-    }
-    const selectedSet = new Set(selection);
-    const correctSet = new Set(q.correctas);
-    const ok =
-      selectedSet.size === correctSet.size &&
-      [...correctSet].every(i => selectedSet.has(i));
+    if (selection.length === 0 || answered) return;
+    const sel = new Set(selection);
+    const ok = sel.size === q.correctas.length && q.correctas.every((i) => sel.has(i));
+    if (ok) setScore((s) => s + 1);
+    registrar(ok ? "ok" : "bad", selection);
+  }
 
-    if (ok) setScore(s => s + 1);
+  function togglePausa() {
+    setAviso(paused ? "Tiempo reanudado." : "Tiempo en pausa.");
+    setPaused(!paused);
+  }
 
-    // auditoría confirmada
-    const durMs = Date.now() - preguntaInicio.current;
-    setAuditoria(a => [...a, {
-      preguntaId: q.id,
-      seleccion: selection,
-      correctas: q.correctas,
-      ok,
-      tiempoMs: durMs,
-      agotado: false,
-    }]);
+  function sumarTiempo() {
+    setTimeLeft((t) => t + 60);
+    setAviso("Se agregaron 60 segundos.");
+  }
 
-    const correctTexts = q.correctas.map(i => q.opciones[i]).join(", ");
-    const chosenTexts = selection.map(i => q.opciones[i]).join(", ");
-    setFeedback(
-      ok
-        ? `✅ Correcto. ${q.explicacion}`
-        : `❌ Incorrecto. Correctas: ${correctTexts}. Vos marcaste: ${chosenTexts}. ${q.explicacion}`
-    );
-
-    setCanNext(true);
-    setPaused(true);
-    setTimeout(() => feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  function quitarLimite() {
+    setLimitDisabled(true);
+    setAviso("Límite de tiempo desactivado para esta pregunta.");
   }
 
   function handleNext() {
-    if (idx < preguntas.length - 1) setIdx(i => i + 1);
+    if (idx < total - 1) setIdx((i) => i + 1);
     else setShowResults(true);
   }
 
   function handleRestart() {
-    const newOrder = shuffle([...Array(preguntas.length).keys()]);
-    setOrder(newOrder);
-    setIdx(0); setScore(0); setShowResults(false);
-    const first = preguntas[newOrder[0]];
-    setTimeLeft(first.tiempo); setPaused(!gateOpen); setLimitDisabled(false);
-    setSelection([]); setTimedOut(false); setCanNext(false); setFeedback("");
-
-    // reset auditoría/envío
+    const nuevoOrden = shuffle([...Array(total).keys()]);
+    setOrder(nuevoOrden);
+    setIdx(0);
+    setScore(0);
+    setShowResults(false);
     setAuditoria([]);
+    setGuardado("idle");
+    // forzamos el reset de la primera pregunta aunque idx ya fuera 0
+    setTimeLeft(preguntas[nuevoOrden[0]].tiempo);
+    setPaused(false);
+    setLimitDisabled(false);
+    setSelection([]);
+    setRespuesta(null);
     quizStartedAt.current = Date.now();
     preguntaInicio.current = Date.now();
-    setSent(false);
   }
 
-  // Envío a Google Sheets al finalizar (ahora con auditoría legible)
-useEffect(() => {
-  if (!showResults || sent) return;
+  /* ---------- Envío a Google Sheets al terminar ---------- */
+  useEffect(() => {
+    if (!showResults || guardado !== "idle") return;
+    setGuardado("saving");
 
-  const tiempoSegundos = Math.max(
-    0,
-    Math.round((Date.now() - quizStartedAt.current) / 1000)
-  );
+    const payload = {
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
+      email: email.trim(),
+      score,
+      total,
+      tiempoSegundos: Math.max(0, Math.round((Date.now() - quizStartedAt.current) / 1000)),
+      respuestas: buildReadableAudit(auditoria),
+    };
 
-  // 1) Transformamos la auditoría a algo entendible
-  const readable = buildReadableAudit(auditoria);
-  // 2) Armamos el payload
-  const payload = {
-    nombre, apellido, email,
-    score,
-    total: preguntas.length,
-    tiempoSegundos,
+    fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((r) => setGuardado(r.ok ? "ok" : "error"))
+      .catch((err) => {
+        console.error("Error guardando en Sheets:", err);
+        setGuardado("error");
+      });
+  }, [showResults, guardado, nombre, apellido, email, score, total, auditoria]);
 
-    // 👇 Ahora mandamos la versión legible
-    respuestas: readable,
+  /* ========= UI ========= */
 
-    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : ""
-  };
-
-  fetch("/api/save", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload),
-  })
-    .then(() => setSent(true))
-    .catch((err) => {
-      console.error("Error guardando en Sheets:", err);
-    });
-}, [showResults, sent, nombre, apellido, email, score, auditoria]);
-
-
-  /* --- UI: modal de datos (bloquea hasta Empezar) --- */
+  /* --- Ventana de datos (bloquea el juego hasta "Empezar") --- */
   const gateModal = !gateOpen && (
-    <div style={{
-      position:"fixed", inset:0, background:"rgba(0,0,0,.35)",
-      display:"grid", placeItems:"center", zIndex:50
-    }}>
-      <div style={{
-        width:"min(560px,92vw)", background:"#fff",
-        border:"1px solid rgba(0,0,0,.06)", borderRadius:18,
-        boxShadow:"0 28px 80px -30px rgba(0,0,0,.35)", padding:"22px"
-      }}>
-        <h2 style={{fontSize:22, fontWeight:800, color:"#162126"}}>Antes de empezar</h2>
-        <p style={{color:"#334155", marginTop:6}}>Completá tus datos para guardar tu puntaje.</p>
+    <div className="gate-backdrop">
+      <div
+        className="gate-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gate-titulo"
+        aria-describedby="gate-desc"
+      >
+        <h2 id="gate-titulo" className="gate-title">Antes de empezar</h2>
+        <p id="gate-desc" className="gate-desc">Completá tus datos para guardar tu puntaje.</p>
 
-        <div style={{display:"grid", gap:12, marginTop:16}}>
-          <input placeholder="Nombre" value={nombre} onChange={e=>setNombre(e.target.value)}
-                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
-          <input placeholder="Apellido" value={apellido} onChange={e=>setApellido(e.target.value)}
-                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
-          <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}
-                style={{height:44, borderRadius:12, border:"1px solid #e5e7eb", padding:"0 12px"}} />
-        </div>
+        <form onSubmit={empezar} noValidate className="gate-form">
+          <div className="field">
+            <label htmlFor="nombre">Nombre</label>
+            <input
+              id="nombre"
+              ref={nombreRef}
+              autoFocus
+              autoComplete="given-name"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              aria-invalid={intentoEnviar && !!errores.nombre}
+              aria-describedby={intentoEnviar && errores.nombre ? "nombre-error" : undefined}
+            />
+            {intentoEnviar && errores.nombre && (
+              <p id="nombre-error" className="field-error">{errores.nombre}</p>
+            )}
+          </div>
 
-        <div style={{display:"flex", gap:10, marginTop:16}}>
-          <button
-            onClick={() => {
-              if (!canStart) return;
-              setGateOpen(true);
-              setPaused(false); // arranca el timer
-              quizStartedAt.current = Date.now();
-              preguntaInicio.current = Date.now();
-            }}
-            disabled={!canStart}
-            className={canStart ? "btn-confirm enabled" : "btn-confirm"}
-            style={{flex:1}}
-          >
-            Empezar
-          </button>
+          <div className="field">
+            <label htmlFor="apellido">Apellido</label>
+            <input
+              id="apellido"
+              ref={apellidoRef}
+              autoComplete="family-name"
+              value={apellido}
+              onChange={(e) => setApellido(e.target.value)}
+              aria-invalid={intentoEnviar && !!errores.apellido}
+              aria-describedby={intentoEnviar && errores.apellido ? "apellido-error" : undefined}
+            />
+            {intentoEnviar && errores.apellido && (
+              <p id="apellido-error" className="field-error">{errores.apellido}</p>
+            )}
+          </div>
 
-          <button onClick={() => history.back()} className="btn-next" style={{flex:1}}>
-            Cancelar
-          </button>
-        </div>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              ref={emailRef}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={intentoEnviar && !!errores.email}
+              aria-describedby={intentoEnviar && errores.email ? "email-error" : undefined}
+            />
+            {intentoEnviar && errores.email && (
+              <p id="email-error" className="field-error">{errores.email}</p>
+            )}
+          </div>
 
-        <p style={{fontSize:12, color:"#64748b", marginTop:10}}>
+          <div className="gate-actions">
+            <button type="submit" className="btn-confirm enabled">Empezar</button>
+            <Link href="/" className="btn-next">Cancelar</Link>
+          </div>
+        </form>
+
+        <p className="gate-note">
           Al continuar aceptás que registremos tus datos y respuestas con fines educativos.
         </p>
       </div>
     </div>
   );
 
-  /* Resultados */
+  /* --- Resultados --- */
   if (showResults) {
     return (
       <main id="contenido" className="q-wrap">
-        {gateModal}
         <section className="q-card">
-          <h1 style={{fontSize:22, fontWeight:800, color:"#2a2a2a"}}>Resultados</h1>
-          <p className="q-sub">Puntaje: <strong style={{color:"#111827"}}>{score}</strong> / {preguntas.length}</p>
+          <h1 ref={resultadosRef} tabIndex={-1} className="results-title">Resultados</h1>
+          <p className="q-sub">
+            Puntaje: <strong className="results-score">{score}</strong> de {total}
+          </p>
 
-          {/* Progreso 100% */}
-          <div className="progress-track" role="progressbar" aria-label="Progreso"
-               aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}
-               style={{marginTop:12}}>
-            <div className="progress-bar" style={{ width: `100%` }} />
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Progreso"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={100}
+          >
+            <div className="progress-bar" style={{ width: "100%" }} />
           </div>
-          <div className="progress-percent">100%</div>
 
-          <div style={{display:"flex", gap:12, marginTop:18}}>
-            <button type="button"
-                    onClick={handleRestart}
-                    className="btn-confirm enabled"
-                    style={{flex:1}}>
+          <p className="save-status" role="status">
+            {guardado === "saving" && "Guardando tus resultados…"}
+            {guardado === "ok" && "Tus resultados se guardaron correctamente."}
+            {guardado === "error" &&
+              "No pudimos guardar tus resultados. Avisale a la persona a cargo de la actividad."}
+          </p>
+
+          <div className="actions">
+            <button type="button" onClick={handleRestart} className="btn-confirm enabled">
               Reiniciar
             </button>
-            <Link href="/" className="btn-next" style={{flex:1}}>
-              Volver al inicio
-            </Link>
+            <Link href="/" className="btn-next">Volver al inicio</Link>
           </div>
         </section>
       </main>
     );
   }
 
-  /* Pregunta */
+  /* --- Pregunta --- */
+  const correctTexts = q.correctas.map((i) => q.opciones[i]).join(", ");
+
   return (
-    <main id="contenido" className="q-wrap">
+    <>
       {gateModal}
 
-      {/* CARD 1: header + progreso */}
-      <section className="q-card q-head">
-        <Link href="/" aria-label="Volver" style={{color:"#4b5563"}}>←</Link>
-        <h1>Pregunta {idx + 1} de {preguntas.length}</h1>
-        <p className="q-sub">
-          Observá la imagen y seleccioná {multi ? "una o más opciones" : "la opción correcta"}.
-        </p>
+      {/* Mientras la ventana de datos está abierta, el resto queda "inerte":
+          no se puede enfocar ni lo lee el lector de pantalla. */}
+      <main id="contenido" className="q-wrap" inert={!gateOpen}>
+        {/* Región invisible donde anunciamos cambios del timer */}
+        <p className="sr-only" aria-live="polite" role="status">{aviso}</p>
 
-        <div className="progress-track" aria-label="Progreso" role="progressbar"
-             aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-          <div className="progress-bar" style={{ width: `${progress}%` }} />
-        </div>
-        <div className="progress-percent">{progress}%</div>
-      </section>
+        {/* CARD 1: encabezado + progreso */}
+        <section className="q-card q-head">
+          <Link href="/" className="back-link">
+            <span aria-hidden="true">←</span> Volver al inicio
+          </Link>
+          <h1 ref={tituloRef} tabIndex={-1}>Pregunta {idx + 1} de {total}</h1>
+          <p className="q-sub">
+            Observá la imagen y seleccioná {multi ? "una o más opciones" : "la opción correcta"}.
+          </p>
 
-      {/* CARD 2: timer + controles */}
-      <section className="q-card q-timer">
-        <div className="time-pill">
-          {/* icono reloj */}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" style={{marginRight:6}}>
-            <circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2"/><path d="M9 3h6"/>
-          </svg>
-          <span>Tiempo restante:&nbsp;</span>
-          <span className="time-value">{formatTime(timeLeft)}</span>
-        </div>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Progreso"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <div className="progress-bar" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="progress-percent" aria-hidden="true">{progress}%</div>
+        </section>
 
-        <div style={{display:"flex", gap:"10px", marginTop:"12px", flexWrap:"wrap"}}>
-          <button type="button" className="btn-sm" onClick={() => setPaused(p => !p)}>
-            Pausar
-          </button>
-          <button type="button" className="btn-sm" onClick={() => !limitDisabled && setTimeLeft(t => t + 60)}>
-            +60s
-          </button>
-          <button type="button" className="btn-sm" onClick={() => setLimitDisabled(true)}>
-            Desactivar límite
-          </button>
-        </div>
-      </section>
+        {/* CARD 2: timer + controles */}
+        <section className="q-card q-timer" aria-label="Tiempo">
+          <div className="time-pill">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="13" r="8" />
+              <path d="M12 9v5l3 2" />
+              <path d="M9 3h6" />
+            </svg>
+            {limitDisabled ? (
+              <span>Sin límite de tiempo</span>
+            ) : (
+              <>
+                <span>Tiempo restante:</span>
+                {/* Se actualiza cada segundo: no lo anunciamos para no saturar al lector */}
+                <span className="time-value">{formatTime(timeLeft)}</span>
+                {paused && <span className="time-paused">(en pausa)</span>}
+              </>
+            )}
+          </div>
 
-      {/* CARD 3: imagen */}
-      <section className="q-card q-media">
-        <div className="media">
-          <Image
-            src={q.imagen}
-            alt=""
-            fill
-            sizes="(max-width: 768px) 100vw, 800px"
-            className=""
-            priority={idx === 0}
-          />
-        </div>
-      </section>
+          <div className="timer-controls">
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={togglePausa}
+              aria-pressed={paused}
+              disabled={answered || limitDisabled}
+            >
+              {paused ? "Reanudar" : "Pausar"}
+            </button>
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={sumarTiempo}
+              disabled={answered || limitDisabled}
+            >
+              Sumar 60 segundos
+            </button>
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={quitarLimite}
+              disabled={answered || limitDisabled}
+            >
+              Desactivar límite
+            </button>
+          </div>
+        </section>
 
-      {/* CARD 4: opciones + acciones */}
-      <section className="q-card q-options">
-        <form>
-          <fieldset>
-            <legend>¿Qué barreras se visualizan en la imagen?</legend>
+        {/* CARD 3: imagen */}
+        <section className="q-card q-media" aria-label="Imagen">
+          <figure className="media">
+            <Image
+              key={q.imagen}
+              src={q.imagen}
+              alt={q.alt}
+              width={740}
+              height={493}
+              sizes="(max-width: 820px) 100vw, 780px"
+              priority={idx === 0}
+            />
+          </figure>
+        </section>
 
-            <div className="options-grid">
-              {opcionesShuf.map((op, j) => {
-                const active = selection.includes(op.i);
-                return (
-                  <label key={j} className={`option ${active ? "option--active" : ""}`}>
-                    <input
-                      type="checkbox"
-                      name={`respuesta-${q.id}`}
-                      checked={active}
-                      onChange={() => toggleSelect(op.i)}
-                    />
-                    <span>{op.texto}</span>
-                  </label>
-                );
-              })}
-            </div>
+        {/* CARD 4: opciones + acciones */}
+        <section className="q-card q-options">
+          <form onSubmit={(e) => { e.preventDefault(); handleConfirm(); }}>
+            <fieldset disabled={answered}>
+              <legend>{q.enunciado}</legend>
+
+              <div className="options-grid">
+                {opcionesShuf.map((op) => {
+                  const active = selection.includes(op.i);
+                  return (
+                    <label key={op.i} className={`option ${active ? "option--active" : ""}`}>
+                      <input
+                        type="checkbox"
+                        name={`respuesta-${q.id}`}
+                        checked={active}
+                        onChange={() => toggleSelect(op.i)}
+                      />
+                      <span>{op.texto}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             <div className="actions">
               <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={selection.length === 0 || canNext}
-                className={`btn-confirm ${selection.length!==0 && !canNext ? "enabled": ""}`}
+                type="submit"
+                disabled={selection.length === 0 || answered}
+                className={`btn-confirm ${selection.length !== 0 && !answered ? "enabled" : ""}`}
               >
                 Confirmar
               </button>
@@ -448,24 +554,41 @@ useEffect(() => {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!canNext}
-                className={`btn-next ${canNext ? "enabled": ""}`}
+                disabled={!answered}
+                className={`btn-next ${answered ? "enabled" : ""}`}
               >
-                Siguiente
+                {idx < total - 1 ? "Siguiente" : "Ver resultados"}
               </button>
             </div>
+          </form>
 
-            {feedback && (
-              <div
-                ref={feedbackRef}
-                className={`feedback ${feedbackType ? `feedback--${feedbackType}` : ""}`}
-              >
-                {feedback}
-              </div>
-            )}
-          </fieldset>
-        </form>
-      </section>
-    </main>
+          {respuesta && (
+            <div
+              ref={feedbackRef}
+              tabIndex={-1}
+              className={`feedback feedback--${respuesta.resultado}`}
+            >
+              <p className="feedback-title">
+                <span aria-hidden="true">
+                  {respuesta.resultado === "ok" ? "✅ " : respuesta.resultado === "bad" ? "❌ " : "⏳ "}
+                </span>
+                {respuesta.resultado === "ok"
+                  ? "Correcto."
+                  : respuesta.resultado === "bad"
+                  ? "Incorrecto."
+                  : "Se terminó el tiempo."}
+              </p>
+              {respuesta.resultado !== "ok" && (
+                <p>
+                  Correctas: {correctTexts}.
+                  {respuesta.resultado === "bad" && ` Vos marcaste: ${respuesta.seleccionTextos.join(", ")}.`}
+                </p>
+              )}
+              <p className="feedback-text">{q.explicacion}</p>
+            </div>
+          )}
+        </section>
+      </main>
+    </>
   );
 }
