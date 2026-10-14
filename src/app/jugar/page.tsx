@@ -127,8 +127,6 @@ export default function JugarPage() {
     [q]
   );
 
-  const progress = showResults ? 100 : Math.round(((idx + 1) / total) * 100);
-
   /* ---------- Reset al cambiar de pregunta ---------- */
   useEffect(() => {
     setTimeLeft(q.tiempo);
@@ -367,8 +365,8 @@ export default function JugarPage() {
           </div>
 
           <div className="gate-actions">
-            <button type="submit" className="btn-confirm enabled">Empezar</button>
-            <Link href="/" className="btn-next">Cancelar</Link>
+            <button type="submit" className="btn-primary">Empezar</button>
+            <Link href="/" className="btn-secondary">Cancelar</Link>
           </div>
         </form>
 
@@ -379,25 +377,37 @@ export default function JugarPage() {
     </div>
   );
 
+  /* --- Barra superior (marca + tiempo) --- */
+  const marca = (
+    <Link href="/" className="brand">
+      <span className="brand-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+          <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      Accesibilidad UNM
+      <span className="sr-only">, volver al inicio</span>
+    </Link>
+  );
+
   /* --- Resultados --- */
   if (showResults) {
     return (
-      <main id="contenido" className="q-wrap">
-        <section className="q-card">
-          <h1 ref={resultadosRef} tabIndex={-1} className="results-title">Resultados</h1>
-          <p className="q-sub">
-            Puntaje: <strong className="results-score">{score}</strong> de {total}
+      <main id="contenido" className="game">
+        <header className="game-bar">{marca}</header>
+
+        <section className="result-card">
+          <h1 ref={resultadosRef} tabIndex={-1} className="result-title">Resultados</h1>
+          <p className="result-score">
+            <strong>{score}</strong> <span>de {total} correctas</span>
           </p>
 
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="Progreso"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={100}
-          >
-            <div className="progress-bar" style={{ width: "100%" }} />
+          {/* Un segmento por pregunta: verde si acertaste, rojo si no */}
+          <div className="segments" aria-hidden="true">
+            {auditoria.map((r, i) => (
+              <span key={i} className={`segment ${r.ok ? "segment--done" : "segment--miss"}`} />
+            ))}
           </div>
 
           <p className="save-status" role="status">
@@ -407,11 +417,11 @@ export default function JugarPage() {
               "No pudimos guardar tus resultados. Avisale a la persona a cargo de la actividad."}
           </p>
 
-          <div className="actions">
-            <button type="button" onClick={handleRestart} className="btn-confirm enabled">
-              Reiniciar
+          <div className="result-actions">
+            <button type="button" onClick={handleRestart} className="btn-primary">
+              Jugar de nuevo
             </button>
-            <Link href="/" className="btn-next">Volver al inicio</Link>
+            <Link href="/" className="btn-secondary">Volver al inicio</Link>
           </div>
         </section>
       </main>
@@ -427,167 +437,176 @@ export default function JugarPage() {
 
       {/* Mientras la ventana de datos está abierta, el resto queda "inerte":
           no se puede enfocar ni lo lee el lector de pantalla. */}
-      <main id="contenido" className="q-wrap" inert={!gateOpen}>
+      <main id="contenido" className="game" inert={!gateOpen}>
         {/* Región invisible donde anunciamos cambios del timer */}
         <p className="sr-only" aria-live="polite" role="status">{aviso}</p>
 
-        {/* CARD 1: encabezado + progreso */}
-        <section className="q-card q-head">
-          <Link href="/" className="back-link">
-            <span aria-hidden="true">←</span> Volver al inicio
-          </Link>
-          <h1 ref={tituloRef} tabIndex={-1}>Pregunta {idx + 1} de {total}</h1>
-          <p className="q-sub">
-            Observá la imagen y seleccioná {multi ? "una o más opciones" : "la opción correcta"}.
-          </p>
+        <header className="game-bar">
+          {marca}
 
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="Progreso"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress}
-          >
-            <div className="progress-bar" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="progress-percent" aria-hidden="true">{progress}%</div>
-        </section>
+          <div className="timer" role="group" aria-label="Tiempo">
+            <p className="timer-value">
+              {limitDisabled ? (
+                <span className="timer-label">Sin límite de tiempo</span>
+              ) : (
+                <>
+                  <span className="timer-label">
+                    {answered || paused ? "Tiempo detenido" : "Tiempo restante"}
+                  </span>
+                  {/* Se actualiza cada segundo: no lo anunciamos para no saturar al lector */}
+                  <span className="timer-number">{formatTime(timeLeft)}</span>
+                </>
+              )}
+            </p>
 
-        {/* CARD 2: timer + controles */}
-        <section className="q-card q-timer" aria-label="Tiempo">
-          <div className="time-pill">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <circle cx="12" cy="13" r="8" />
-              <path d="M12 9v5l3 2" />
-              <path d="M9 3h6" />
-            </svg>
-            {limitDisabled ? (
-              <span>Sin límite de tiempo</span>
-            ) : (
-              <>
-                <span>Tiempo restante:</span>
-                {/* Se actualiza cada segundo: no lo anunciamos para no saturar al lector */}
-                <span className="time-value">{formatTime(timeLeft)}</span>
-                {paused && <span className="time-paused">(en pausa)</span>}
-              </>
+            {!answered && !limitDisabled && (
+              <div className="timer-controls">
+                <button type="button" className="btn-chip" onClick={togglePausa} aria-pressed={paused}>
+                  {paused ? "Reanudar" : "Pausar"}
+                </button>
+                <button type="button" className="btn-chip" onClick={sumarTiempo}>
+                  +60 s<span className="sr-only">egundos</span>
+                </button>
+                <button type="button" className="btn-chip" onClick={quitarLimite}>
+                  Sin límite
+                </button>
+              </div>
             )}
           </div>
+        </header>
 
-          <div className="timer-controls">
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={togglePausa}
-              aria-pressed={paused}
-              disabled={answered || limitDisabled}
-            >
-              {paused ? "Reanudar" : "Pausar"}
-            </button>
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={sumarTiempo}
-              disabled={answered || limitDisabled}
-            >
-              Sumar 60 segundos
-            </button>
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={quitarLimite}
-              disabled={answered || limitDisabled}
-            >
-              Desactivar límite
-            </button>
-          </div>
-        </section>
-
-        {/* CARD 3: imagen */}
-        <section className="q-card q-media" aria-label="Imagen">
-          <figure className="media">
-            <Image
-              key={q.imagen}
-              src={q.imagen}
-              alt={q.alt}
-              width={740}
-              height={493}
-              sizes="(max-width: 820px) 100vw, 780px"
-              priority={idx === 0}
-            />
-          </figure>
-        </section>
-
-        {/* CARD 4: opciones + acciones */}
-        <section className="q-card q-options">
-          <form onSubmit={(e) => { e.preventDefault(); handleConfirm(); }}>
-            <fieldset disabled={answered}>
-              <legend>{q.enunciado}</legend>
-
-              <div className="options-grid">
-                {opcionesShuf.map((op) => {
-                  const active = selection.includes(op.i);
-                  return (
-                    <label key={op.i} className={`option ${active ? "option--active" : ""}`}>
-                      <input
-                        type="checkbox"
-                        name={`respuesta-${q.id}`}
-                        checked={active}
-                        onChange={() => toggleSelect(op.i)}
-                      />
-                      <span>{op.texto}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="actions">
-              <button
-                type="submit"
-                disabled={selection.length === 0 || answered}
-                className={`btn-confirm ${selection.length !== 0 && !answered ? "enabled" : ""}`}
-              >
-                Confirmar
-              </button>
-
-              <button
-                type="button"
-                onClick={handleNext}
-                disabled={!answered}
-                className={`btn-next ${answered ? "enabled" : ""}`}
-              >
-                {idx < total - 1 ? "Siguiente" : "Ver resultados"}
-              </button>
-            </div>
-          </form>
-
-          {respuesta && (
+        <div className="game-body">
+          <div className="q-top">
+            <h1 ref={tituloRef} tabIndex={-1} className="q-title">
+              Pregunta {idx + 1} de {total}
+            </h1>
             <div
-              ref={feedbackRef}
-              tabIndex={-1}
-              className={`feedback feedback--${respuesta.resultado}`}
+              className="segments"
+              role="progressbar"
+              aria-label="Progreso"
+              aria-valuemin={0}
+              aria-valuemax={total}
+              aria-valuenow={idx + 1}
+              aria-valuetext={`Pregunta ${idx + 1} de ${total}`}
             >
-              <p className="feedback-title">
-                <span aria-hidden="true">
-                  {respuesta.resultado === "ok" ? "✅ " : respuesta.resultado === "bad" ? "❌ " : "⏳ "}
-                </span>
-                {respuesta.resultado === "ok"
-                  ? "Correcto."
-                  : respuesta.resultado === "bad"
-                  ? "Incorrecto."
-                  : "Se terminó el tiempo."}
-              </p>
-              {respuesta.resultado !== "ok" && (
-                <p>
-                  Correctas: {correctTexts}.
-                  {respuesta.resultado === "bad" && ` Vos marcaste: ${respuesta.seleccionTextos.join(", ")}.`}
-                </p>
-              )}
-              <p className="feedback-text">{q.explicacion}</p>
+              {Array.from({ length: total }, (_, i) => (
+                <span key={i} className={`segment ${i <= idx ? "segment--done" : ""}`} />
+              ))}
             </div>
-          )}
-        </section>
+          </div>
+
+          <div className="q-layout">
+            <figure className="q-photo">
+              <Image
+                key={q.imagen}
+                src={q.imagen}
+                alt={q.alt}
+                width={740}
+                height={493}
+                sizes="(max-width: 900px) 100vw, 640px"
+                priority={idx === 0}
+              />
+            </figure>
+
+            <div className="q-panel">
+              <form onSubmit={(e) => { e.preventDefault(); handleConfirm(); }}>
+                <fieldset disabled={answered}>
+                  <legend className="q-question">{q.enunciado}</legend>
+                  <p className="q-hint">
+                    {multi ? "Podés marcar una o más opciones." : "Marcá la opción correcta."}
+                  </p>
+
+                  <div className="options">
+                    {opcionesShuf.map((op) => {
+                      const active = selection.includes(op.i);
+                      const esCorrecta = q.correctas.includes(op.i);
+                      // Después de responder mostramos qué era correcto y qué no
+                      const estado = !answered
+                        ? ""
+                        : esCorrecta
+                        ? "option--correct"
+                        : active
+                        ? "option--wrong"
+                        : "option--dim";
+                      return (
+                        <label
+                          key={op.i}
+                          className={`option ${active ? "option--active" : ""} ${estado}`}
+                        >
+                          <input
+                            type="checkbox"
+                            name={`respuesta-${q.id}`}
+                            checked={active}
+                            onChange={() => toggleSelect(op.i)}
+                          />
+                          <span className="option-text">{op.texto}</span>
+                          {answered && esCorrecta && (
+                            <svg className="option-mark" viewBox="0 0 24 24" role="img" aria-label="Correcta">
+                              <path d="M5 12.5l4.5 4.5L19 7.5" />
+                            </svg>
+                          )}
+                          {answered && !esCorrecta && active && (
+                            <svg className="option-mark" viewBox="0 0 24 24" role="img" aria-label="Incorrecta">
+                              <path d="M7 7l10 10M17 7L7 17" />
+                            </svg>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {!answered && (
+                  <button
+                    type="submit"
+                    className="btn-primary btn-block"
+                    disabled={selection.length === 0}
+                  >
+                    Confirmar
+                  </button>
+                )}
+              </form>
+
+              {respuesta && (
+                <div
+                  ref={feedbackRef}
+                  tabIndex={-1}
+                  className={`feedback feedback--${respuesta.resultado}`}
+                >
+                  <p className="feedback-title">
+                    <span className="feedback-icon" aria-hidden="true">
+                      {respuesta.resultado === "ok" ? (
+                        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                      ) : respuesta.resultado === "bad" ? (
+                        <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7" /><path d="M12 10v3l2 1.5M10 3h4" /></svg>
+                      )}
+                    </span>
+                    {respuesta.resultado === "ok"
+                      ? "¡Correcto!"
+                      : respuesta.resultado === "bad"
+                      ? "No es correcto"
+                      : "Se terminó el tiempo"}
+                  </p>
+                  {respuesta.resultado !== "ok" && (
+                    <p className="feedback-detail">
+                      Correctas: {correctTexts}.
+                      {respuesta.resultado === "bad" && ` Marcaste: ${respuesta.seleccionTextos.join(", ")}.`}
+                    </p>
+                  )}
+                  <p className="feedback-text">{q.explicacion}</p>
+                </div>
+              )}
+
+              {answered && (
+                <button type="button" onClick={handleNext} className="btn-primary btn-block">
+                  {idx < total - 1 ? "Siguiente pregunta" : "Ver resultados"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </main>
     </>
   );
