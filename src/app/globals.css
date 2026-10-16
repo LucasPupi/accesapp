@@ -129,19 +129,11 @@ input:focus-visible {
 }
 
 .hero-body {
-  padding: 44px 40px 40px;
+  padding: 28px 40px 36px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
 
-.hero-icon {
-  width: 76px; height: 76px;
-  border-radius: 999px;
-  background: var(--green-tint); color: var(--green);
-  display: grid; place-items: center;
-}
-
 .hero-title {
-  margin-top: 14px;
   font-size: clamp(30px, 5vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;
 }
 .hero-underline {
@@ -154,21 +146,18 @@ input:focus-visible {
 }
 .hero-desc strong { color: var(--ink); }
 
-.metrics {
-  list-style: none; margin: 28px 0 0; padding: 0;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 40px;
-}
-.metric strong {
-  display: block; font-size: 30px; font-weight: 800; color: var(--green); line-height: 1.1;
-}
-.metric span { display: block; margin-top: 4px; color: var(--muted); font-size: 15px; }
+.btn-start { margin-top: 28px; width: min(420px, 100%); }
 
-.btn-start { margin-top: 32px; width: min(420px, 100%); }
+/* ---------- Escena de la portada (lupa que busca barreras) ---------- */
+.escena { background: #eaf3ed; border-bottom: 1px solid var(--line); }
+.escena svg { display: block; width: 100%; height: auto; }
+/* Sin animación: la lupa no se muestra y las tres etiquetas quedan a la vista */
+.escena-lupa { display: none; }
 .btn-start svg { width: 20px; height: 20px; }
 
 @media (max-width: 520px) {
   .home-wrap { padding: 16px; }
-  .hero-body { padding: 32px 22px 28px; }
+  .hero-body { padding: 24px 22px 28px; }
 }
 
 /* ==========================================================
@@ -435,6 +424,36 @@ fieldset:disabled .option { cursor: default; }
 @keyframes saltar     { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes parpadeo   { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.08); } }
 @keyframes mirar      { 0%, 15% { transform: translateX(0); } 25%, 40% { transform: translateX(-16px); } 55%, 70% { transform: translateX(16px); } 85%, 100% { transform: translateX(0); } }
+/* Recorrido de la lupa: entra, se detiene en cada barrera y sale */
+@keyframes lupa-recorrido {
+  0%        { transform: translate(620px, -70px); }
+  9%, 26%   { transform: translate(140px, 160px); }
+  17%       { transform: translate(146px, 154px); }
+  36%, 53%  { transform: translate(281px, 104px); }
+  44%       { transform: translate(287px, 98px); }
+  63%, 80%  { transform: translate(470px, 158px); }
+  71%       { transform: translate(476px, 152px); }
+  92%, 100% { transform: translate(620px, -70px); }
+}
+/* Cada etiqueta aparece cuando llega la lupa y se va al final del ciclo */
+@keyframes chip-1 {
+  0%, 11%   { opacity: 0; transform: scale(.5); }
+  14%       { opacity: 1; transform: scale(1.12); }
+  17%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
+@keyframes chip-2 {
+  0%, 38%   { opacity: 0; transform: scale(.5); }
+  41%       { opacity: 1; transform: scale(1.12); }
+  44%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
+@keyframes chip-3 {
+  0%, 65%   { opacity: 0; transform: scale(.5); }
+  68%       { opacity: 1; transform: scale(1.12); }
+  71%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
 @keyframes girar-aro  { from { transform: scale(.9); opacity: .0; } to { transform: scale(1); opacity: 1; } }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -444,14 +463,15 @@ fieldset:disabled .option { cursor: default; }
   .loader-pupil { animation: mirar 2.4s ease-in-out .4s infinite; }
   .loader-title, .loader-bar, .loader-count { animation: aparecer .5s ease-out .2s both; }
 
-  /* Portada: la tarjeta sube y el ojo parpadea una vez */
+  /* Portada: la tarjeta sube */
   .hero-card { animation: subir .6s cubic-bezier(.2, .8, .2, 1) both; }
-  .hero-icon svg { transform-origin: center; animation: parpadeo 1.6s ease-in-out .5s 1 both; }
-  .hero-body > * { animation: aparecer .5s ease-out both; }
-  .hero-body > :nth-child(2) { animation-delay: .1s; }
-  .hero-body > :nth-child(4) { animation-delay: .15s; }
-  .hero-body > :nth-child(5) { animation-delay: .2s; }
-  .hero-body > :nth-child(6) { animation-delay: .25s; }
+
+  /* Escena: la lupa recorre las tres barreras y las va marcando (ciclo de 10 s) */
+  .escena-lupa { display: inline; animation: lupa-recorrido 10s ease-in-out .6s infinite both; }
+  .escena-chip { transform-box: fill-box; transform-origin: center bottom; }
+  .escena-chip--1 { animation: chip-1 10s ease-out .6s infinite both; }
+  .escena-chip--2 { animation: chip-2 10s ease-out .6s infinite both; }
+  .escena-chip--3 { animation: chip-3 10s ease-out .6s infinite both; }
 
   /* Ventana de datos */
   .gate-backdrop { animation: aparecer .25s ease-out both; }

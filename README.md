@@ -18,6 +18,7 @@ La persona carga su nombre, apellido y email, responde las preguntas (cada una c
 | Estilos | `src/app/globals.css` | Todo el diseño visual y las animaciones. Los colores están al principio. |
 | Sonidos | `src/lib/sonidos.ts` | Los sonidos del juego (se generan con código, no hay archivos de audio). |
 | Pantalla de carga | `src/components/PantallaCarga.tsx` | El ojo animado que aparece mientras se cargan las fotos. |
+| Escena de la portada | `src/components/EscenaBarreras.tsx` | La lupa que recorre una escena y marca las tres barreras. |
 | Fotos | `public/fotos/` | Imágenes de cada pregunta (formato `.webp`). |
 | Diseño general | `src/app/layout.tsx` | Fuente, título de la pestaña y estructura común a todas las páginas. |
 
@@ -41,7 +42,6 @@ Tecnologías: [Next.js](https://nextjs.org) (React + TypeScript). Se publica en 
 },
 ```
 
-La cantidad de preguntas de la portada se actualiza sola.
 
 > **Sobre el `alt`:** describí la escena como se la contarías a alguien por teléfono (quién está, dónde, qué hace), **sin decir cuál es la barrera**: eso es lo que la persona tiene que descubrir.
 
