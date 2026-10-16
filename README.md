@@ -15,7 +15,10 @@ La persona carga su nombre, apellido y email, responde las preguntas (cada una c
 | Juego | `src/app/jugar/page.tsx` | Ventana de datos, preguntas, timer, respuestas y resultados. |
 | Preguntas | `src/data/preguntas.ts` | **Acá se agregan o cambian las preguntas.** |
 | Guardado | `src/app/api/save/route.ts` | Recibe los resultados y los agrega como fila en Google Sheets. |
-| Estilos | `src/app/globals.css` | Todo el diseño visual. |
+| Estilos | `src/app/globals.css` | Todo el diseño visual y las animaciones. Los colores están al principio. |
+| Sonidos | `src/lib/sonidos.ts` | Los sonidos del juego (se generan con código, no hay archivos de audio). |
+| Pantalla de carga | `src/components/PantallaCarga.tsx` | El ojo animado que aparece mientras se cargan las fotos. |
+| Escena de la portada | `src/components/EscenaBarreras.tsx` | La lupa que recorre una escena y marca las tres barreras. |
 | Fotos | `public/fotos/` | Imágenes de cada pregunta (formato `.webp`). |
 | Diseño general | `src/app/layout.tsx` | Fuente, título de la pestaña y estructura común a todas las páginas. |
 
@@ -39,7 +42,6 @@ Tecnologías: [Next.js](https://nextjs.org) (React + TypeScript). Se publica en 
 },
 ```
 
-La cantidad de preguntas de la portada se actualiza sola.
 
 > **Sobre el `alt`:** describí la escena como se la contarías a alguien por teléfono (quién está, dónde, qué hace), **sin decir cuál es la barrera**: eso es lo que la persona tiene que descubrir.
 
@@ -83,4 +85,5 @@ Como es una app sobre accesibilidad, la app también intenta serlo:
 - Los formularios tienen etiquetas y mensajes de error claros.
 - Los resultados de cada respuesta y los avisos del timer se anuncian al lector de pantalla.
 - El tiempo se puede pausar, extender o desactivar.
-- Se respeta la preferencia del sistema de "reducir movimiento".
+- Se respeta la preferencia del sistema de "reducir movimiento": con esa opción activada, las animaciones se apagan.
+- Los sonidos nunca son la única señal (siempre hay un mensaje en pantalla) y se pueden apagar con el botón **Sonido**; la elección queda guardada en el navegador.

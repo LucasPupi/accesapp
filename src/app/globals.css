@@ -129,19 +129,11 @@ input:focus-visible {
 }
 
 .hero-body {
-  padding: 44px 40px 40px;
+  padding: 28px 40px 36px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
 
-.hero-icon {
-  width: 76px; height: 76px;
-  border-radius: 999px;
-  background: var(--green-tint); color: var(--green);
-  display: grid; place-items: center;
-}
-
 .hero-title {
-  margin-top: 14px;
   font-size: clamp(30px, 5vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;
 }
 .hero-underline {
@@ -154,21 +146,18 @@ input:focus-visible {
 }
 .hero-desc strong { color: var(--ink); }
 
-.metrics {
-  list-style: none; margin: 28px 0 0; padding: 0;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 40px;
-}
-.metric strong {
-  display: block; font-size: 30px; font-weight: 800; color: var(--green); line-height: 1.1;
-}
-.metric span { display: block; margin-top: 4px; color: var(--muted); font-size: 15px; }
+.btn-start { margin-top: 28px; width: min(420px, 100%); }
 
-.btn-start { margin-top: 32px; width: min(420px, 100%); }
+/* ---------- Escena de la portada (lupa que busca barreras) ---------- */
+.escena { background: #eaf3ed; border-bottom: 1px solid var(--line); }
+.escena svg { display: block; width: 100%; height: auto; }
+/* Sin animación: la lupa no se muestra y las tres etiquetas quedan a la vista */
+.escena-lupa { display: none; }
 .btn-start svg { width: 20px; height: 20px; }
 
 @media (max-width: 520px) {
   .home-wrap { padding: 16px; }
-  .hero-body { padding: 32px 22px 28px; }
+  .hero-body { padding: 24px 22px 28px; }
 }
 
 /* ==========================================================
@@ -376,6 +365,149 @@ fieldset:disabled .option { cursor: default; }
 }
 .field input[aria-invalid="true"] { border: 2px solid var(--red); }
 .field-error { color: var(--red); font-size: 15px; font-weight: 600; }
+
+/* ==========================================================
+   PANTALLA DE CARGA
+   ========================================================== */
+.loader {
+  min-height: 100svh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 24px;
+  text-align: center;
+}
+.loader-eye { width: 128px; height: 128px; margin-bottom: 8px; }
+.loader-eye svg { width: 100%; height: 100%; overflow: visible; }
+.loader-ring { fill: var(--green); }
+.loader-outline { fill: #fff; }
+.loader-pupil circle { fill: var(--ink); }
+.loader-pupil .loader-glint { fill: #fff; }
+.loader-title { font-size: 20px; font-weight: 700; }
+.loader-bar {
+  width: min(240px, 70vw); height: 6px; border-radius: 3px;
+  background: #d3ddd6; overflow: hidden;
+}
+.loader-bar span {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--green);
+  transition: width .25s ease;
+}
+.loader-count { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Botón de sonido ---------- */
+.bar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.btn-sound { display: inline-flex; align-items: center; gap: 8px; }
+.btn-sound svg {
+  width: 20px; height: 20px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.btn-sound svg path:first-child { fill: currentColor; }
+.btn-sound[aria-pressed="false"] { color: var(--muted); }
+/* El de sonido no usa el color ámbar de "pausado" */
+.btn-sound[aria-pressed="true"] { background: var(--surface); border-color: var(--line-strong); }
+
+/* Tiempo casi agotado */
+.timer-number--low { color: var(--red); }
+
+/* ==========================================================
+   ANIMACIONES
+   Solo se activan si la persona NO pidió "reducir movimiento".
+   ========================================================== */
+@keyframes subir      { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes aparecer   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes acercar    { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes desde-der  { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes rebote     { 0% { transform: scale(1); } 40% { transform: scale(1.025); } 100% { transform: scale(1); } }
+@keyframes sacudir    { 0%,100% { transform: none; } 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes trazo      { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+@keyframes latido     { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes llenar     { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes saltar     { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes parpadeo   { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.08); } }
+@keyframes mirar      { 0%, 15% { transform: translateX(0); } 25%, 40% { transform: translateX(-16px); } 55%, 70% { transform: translateX(16px); } 85%, 100% { transform: translateX(0); } }
+/* Recorrido de la lupa: entra, se detiene en cada barrera y sale */
+@keyframes lupa-recorrido {
+  0%        { transform: translate(620px, -70px); }
+  9%, 26%   { transform: translate(140px, 160px); }
+  17%       { transform: translate(146px, 154px); }
+  36%, 53%  { transform: translate(281px, 104px); }
+  44%       { transform: translate(287px, 98px); }
+  63%, 80%  { transform: translate(470px, 158px); }
+  71%       { transform: translate(476px, 152px); }
+  92%, 100% { transform: translate(620px, -70px); }
+}
+/* Cada etiqueta aparece cuando llega la lupa y se va al final del ciclo */
+@keyframes chip-1 {
+  0%, 11%   { opacity: 0; transform: scale(.5); }
+  14%       { opacity: 1; transform: scale(1.12); }
+  17%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
+@keyframes chip-2 {
+  0%, 38%   { opacity: 0; transform: scale(.5); }
+  41%       { opacity: 1; transform: scale(1.12); }
+  44%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
+@keyframes chip-3 {
+  0%, 65%   { opacity: 0; transform: scale(.5); }
+  68%       { opacity: 1; transform: scale(1.12); }
+  71%, 88%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(.9); }
+}
+@keyframes girar-aro  { from { transform: scale(.9); opacity: .0; } to { transform: scale(1); opacity: 1; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Pantalla de carga: el ojo mira a los costados y parpadea */
+  .loader-ring { transform-origin: 60px 60px; animation: girar-aro .5s ease-out both; }
+  .loader-lid { transform-origin: 60px 60px; animation: parpadeo 2.4s ease-in-out .4s infinite; }
+  .loader-pupil { animation: mirar 2.4s ease-in-out .4s infinite; }
+  .loader-title, .loader-bar, .loader-count { animation: aparecer .5s ease-out .2s both; }
+
+  /* Portada: la tarjeta sube */
+  .hero-card { animation: subir .6s cubic-bezier(.2, .8, .2, 1) both; }
+
+  /* Escena: la lupa recorre las tres barreras y las va marcando (ciclo de 10 s) */
+  .escena-lupa { display: inline; animation: lupa-recorrido 10s ease-in-out .6s infinite both; }
+  .escena-chip { transform-box: fill-box; transform-origin: center bottom; }
+  .escena-chip--1 { animation: chip-1 10s ease-out .6s infinite both; }
+  .escena-chip--2 { animation: chip-2 10s ease-out .6s infinite both; }
+  .escena-chip--3 { animation: chip-3 10s ease-out .6s infinite both; }
+
+  /* Ventana de datos */
+  .gate-backdrop { animation: aparecer .25s ease-out both; }
+  .gate-dialog { animation: acercar .3s cubic-bezier(.2, .8, .2, 1) both; }
+
+  /* Botones: se "hunden" un poco al apretarlos */
+  .btn-primary:active:not(:disabled),
+  .btn-secondary:active,
+  .btn-chip:active { transform: scale(.97); }
+  .btn-primary, .btn-secondary, .btn-chip { transition: background-color .15s ease, border-color .15s ease, transform .1s ease; }
+
+  /* Cada pregunta nueva: la foto se acerca y las opciones entran desde la derecha */
+  .q-enter .q-photo { animation: acercar .45s cubic-bezier(.2, .8, .2, 1) both; }
+  .q-enter .q-panel { animation: desde-der .45s cubic-bezier(.2, .8, .2, 1) .08s both; }
+
+  /* El tramo de la pregunta actual se "llena" */
+  .segment { transition: background-color .3s ease; }
+  .segment--current { transform-origin: left; animation: llenar .5s ease-out both; }
+
+  /* Marcar una opción */
+  .option--active { animation: rebote .22s ease-out; }
+
+  /* Después de responder */
+  .option--correct { animation: rebote .35s ease-out; }
+  .option--wrong { animation: sacudir .4s ease-out; }
+  .option-mark path { stroke-dasharray: 30; animation: trazo .35s ease-out .1s both; }
+  .feedback { animation: subir .35s cubic-bezier(.2, .8, .2, 1) both; }
+  .feedback-icon { animation: saltar .4s cubic-bezier(.2, .8, .2, 1) .1s both; }
+
+  /* Últimos segundos: el reloj late */
+  .timer-number--low { display: inline-block; animation: latido 1s ease-in-out infinite; }
+
+  /* Resultados */
+  .result-card { animation: subir .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .segment--pop { animation: saltar .35s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(.3s + var(--i, 0) * .08s); }
+}
 
 /* ---------- Menos movimiento para quien lo pide en su sistema ---------- */
 @media (prefers-reduced-motion: reduce) {
