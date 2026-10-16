@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preguntas } from "@/data/preguntas";
+import PantallaCarga from "@/components/PantallaCarga";
+import { guardarSonido, reproducir, sonidoActivado, type NombreSonido } from "@/lib/sonidos";
 
 /* ========= Helpers ========= */
 function formatTime(total: number) {
@@ -24,6 +26,45 @@ const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
 /** Cuántos segundos antes del final avisamos al lector de pantalla. */
 const AVISO_SEGUNDOS = 10;
+
+/** Tiempo mínimo que se muestra la pantalla de carga (para que la animación se llegue a ver). */
+const CARGA_MINIMA_MS = 1400;
+
+const menosMovimiento = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Descarga una foto y avisa cuando está lista (o si falló, para no trabar la carga). */
+function precargar(src: string) {
+  return new Promise<void>((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+
+/** Número que sube de 0 hasta `valor` (para el puntaje final). */
+function useConteo(valor: number, activo: boolean) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!activo) return;
+    if (menosMovimiento() || valor === 0) {
+      setN(valor);
+      return;
+    }
+    const dur = 700 + valor * 90;
+    const t0 = performance.now();
+    let raf = 0;
+    const paso = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      setN(Math.round(valor * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(paso);
+    };
+    raf = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(raf);
+  }, [valor, activo]);
+  return n;
+}
 
 /* ========= Tipos ========= */
 type Resultado = "ok" | "bad" | "time";
@@ -79,6 +120,53 @@ export default function JugarPage() {
   const q = preguntas[order[idx]];
   const multi = q.correctas.length > 1;
   const total = preguntas.length;
+
+  /* ---------- Pantalla de carga ---------- */
+  const [cargando, setCargando] = useState(true);
+  const [fotosListas, setFotosListas] = useState(0);
+
+  useEffect(() => {
+    let cancelado = false;
+    const inicio = Date.now();
+    Promise.all(
+      preguntas.map((p) =>
+        precargar(p.imagen).then(() => {
+          if (!cancelado) setFotosListas((n) => n + 1);
+        })
+      )
+    ).then(() => {
+      const minimo = menosMovimiento() ? 300 : CARGA_MINIMA_MS;
+      const resto = Math.max(0, minimo - (Date.now() - inicio));
+      setTimeout(() => {
+        if (!cancelado) setCargando(false);
+      }, resto);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  /* ---------- Sonido ---------- */
+  const [sonido, setSonido] = useState(true);
+  const sonidoRef = useRef(true);
+  useEffect(() => {
+    const guardado = sonidoActivado();
+    setSonido(guardado);
+    sonidoRef.current = guardado;
+  }, []);
+
+  const sonar = useCallback((nombre: NombreSonido) => {
+    if (sonidoRef.current) reproducir(nombre);
+  }, []);
+
+  function alternarSonido() {
+    const nuevo = !sonido;
+    setSonido(nuevo);
+    sonidoRef.current = nuevo;
+    guardarSonido(nuevo);
+    setAviso(nuevo ? "Sonido activado." : "Sonido desactivado.");
+    if (nuevo) reproducir("seleccionar");
+  }
 
   /* ---------- Datos del jugador (ventana inicial) ---------- */
   const [gateOpen, setGateOpen] = useState(false);
@@ -162,8 +250,9 @@ export default function JugarPage() {
         resultado,
         seleccionTextos: sel.map((i) => q.opciones[i]),
       });
+      sonar(resultado === "ok" ? "correcto" : resultado === "bad" ? "incorrecto" : "tiempo");
     },
-    [q]
+    [q, sonar]
   );
 
   // Cuando aparece el mensaje de respuesta le pasamos el foco:
@@ -178,10 +267,14 @@ export default function JugarPage() {
     });
   }, [respuesta]);
 
-  // Al terminar, el foco va al título "Resultados"
+  // Al terminar, el foco va al título "Resultados" y suena la melodía final
   useEffect(() => {
-    if (showResults) resultadosRef.current?.focus();
-  }, [showResults]);
+    if (!showResults) return;
+    resultadosRef.current?.focus();
+    sonar("final");
+  }, [showResults, sonar]);
+
+  const puntajeAnimado = useConteo(score, showResults);
 
   /* ---------- Timer ---------- */
   const timerActivo = gateOpen && !paused && !limitDisabled && !answered && !showResults;
@@ -205,7 +298,9 @@ export default function JugarPage() {
     if (timerActivo && timeLeft === AVISO_SEGUNDOS) {
       setAviso(`Quedan ${AVISO_SEGUNDOS} segundos.`);
     }
-  }, [timerActivo, timeLeft]);
+    // Un toque suave en cada uno de los últimos 5 segundos
+    if (timerActivo && timeLeft > 0 && timeLeft <= 5) sonar("aviso");
+  }, [timerActivo, timeLeft, sonar]);
 
   /* ---------- Acciones ---------- */
   function empezar(e: React.FormEvent) {
@@ -221,6 +316,7 @@ export default function JugarPage() {
   }
 
   function toggleSelect(i: number) {
+    if (!selection.includes(i)) sonar("seleccionar");
     setSelection((prev) => (prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]));
   }
 
@@ -391,22 +487,59 @@ export default function JugarPage() {
     </Link>
   );
 
+  /* --- Botón de sonido --- */
+  const botonSonido = (
+    <button
+      type="button"
+      className="btn-chip btn-sound"
+      onClick={alternarSonido}
+      aria-pressed={sonido}
+    >
+      {sonido ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+          <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+          <path d="M16 9.5l5 5M21 9.5l-5 5" />
+        </svg>
+      )}
+      Sonido
+    </button>
+  );
+
+  /* --- Pantalla de carga --- */
+  if (cargando) {
+    return <PantallaCarga cargadas={fotosListas} total={total} />;
+  }
+
   /* --- Resultados --- */
   if (showResults) {
     return (
       <main id="contenido" className="game">
-        <header className="game-bar">{marca}</header>
+        <header className="game-bar">
+          {marca}
+          {botonSonido}
+        </header>
 
         <section className="result-card">
           <h1 ref={resultadosRef} tabIndex={-1} className="result-title">Resultados</h1>
           <p className="result-score">
-            <strong>{score}</strong> <span>de {total} correctas</span>
+            {/* El número sube de 0 al puntaje; el lector de pantalla lee el valor final */}
+            <strong aria-hidden="true">{puntajeAnimado}</strong>
+            <span className="sr-only">{score}</span> <span>de {total} correctas</span>
           </p>
 
           {/* Un segmento por pregunta: verde si acertaste, rojo si no */}
           <div className="segments" aria-hidden="true">
             {auditoria.map((r, i) => (
-              <span key={i} className={`segment ${r.ok ? "segment--done" : "segment--miss"}`} />
+              <span
+                key={i}
+                className={`segment segment--pop ${r.ok ? "segment--done" : "segment--miss"}`}
+                style={{ "--i": i } as React.CSSProperties}
+              />
             ))}
           </div>
 
@@ -444,34 +577,43 @@ export default function JugarPage() {
         <header className="game-bar">
           {marca}
 
-          <div className="timer" role="group" aria-label="Tiempo">
-            <p className="timer-value">
-              {limitDisabled ? (
-                <span className="timer-label">Sin límite de tiempo</span>
-              ) : (
-                <>
-                  <span className="timer-label">
-                    {answered || paused ? "Tiempo detenido" : "Tiempo restante"}
-                  </span>
-                  {/* Se actualiza cada segundo: no lo anunciamos para no saturar al lector */}
-                  <span className="timer-number">{formatTime(timeLeft)}</span>
-                </>
-              )}
-            </p>
+          <div className="bar-right">
+            <div className="timer" role="group" aria-label="Tiempo">
+              <p className="timer-value">
+                {limitDisabled ? (
+                  <span className="timer-label">Sin límite de tiempo</span>
+                ) : (
+                  <>
+                    <span className="timer-label">
+                      {answered || paused ? "Tiempo detenido" : "Tiempo restante"}
+                    </span>
+                    {/* Se actualiza cada segundo: no lo anunciamos para no saturar al lector */}
+                    <span
+                      className={`timer-number ${
+                        timerActivo && timeLeft <= AVISO_SEGUNDOS ? "timer-number--low" : ""
+                      }`}
+                    >
+                      {formatTime(timeLeft)}
+                    </span>
+                  </>
+                )}
+              </p>
 
-            {!answered && !limitDisabled && (
-              <div className="timer-controls">
-                <button type="button" className="btn-chip" onClick={togglePausa} aria-pressed={paused}>
-                  {paused ? "Reanudar" : "Pausar"}
-                </button>
-                <button type="button" className="btn-chip" onClick={sumarTiempo}>
-                  +60 s<span className="sr-only">egundos</span>
-                </button>
-                <button type="button" className="btn-chip" onClick={quitarLimite}>
-                  Sin límite
-                </button>
-              </div>
-            )}
+              {!answered && !limitDisabled && (
+                <div className="timer-controls">
+                  <button type="button" className="btn-chip" onClick={togglePausa} aria-pressed={paused}>
+                    {paused ? "Reanudar" : "Pausar"}
+                  </button>
+                  <button type="button" className="btn-chip" onClick={sumarTiempo}>
+                    +60 s<span className="sr-only">egundos</span>
+                  </button>
+                  <button type="button" className="btn-chip" onClick={quitarLimite}>
+                    Sin límite
+                  </button>
+                </div>
+              )}
+            </div>
+            {botonSonido}
           </div>
         </header>
 
@@ -490,12 +632,15 @@ export default function JugarPage() {
               aria-valuetext={`Pregunta ${idx + 1} de ${total}`}
             >
               {Array.from({ length: total }, (_, i) => (
-                <span key={i} className={`segment ${i <= idx ? "segment--done" : ""}`} />
+                <span
+                  key={i}
+                  className={`segment ${i < idx ? "segment--done" : i === idx ? "segment--done segment--current" : ""}`}
+                />
               ))}
             </div>
           </div>
 
-          <div className="q-layout">
+          <div className="q-layout q-enter" key={idx}>
             <figure className="q-photo">
               <Image
                 key={q.imagen}
@@ -504,6 +649,9 @@ export default function JugarPage() {
                 width={740}
                 height={493}
                 sizes="(max-width: 900px) 100vw, 640px"
+                // Las fotos ya están optimizadas (.webp chicas) y se precargan en la
+                // pantalla de carga: así aparecen al instante, sin volver a descargarse.
+                unoptimized
                 priority={idx === 0}
               />
             </figure>
