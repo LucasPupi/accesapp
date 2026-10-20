@@ -20,9 +20,9 @@ export const preguntas: Pregunta[] = [
       "Barrera comunicacional",
       "Barrera actitudinal"
     ],
-    correctas: [0,1],
+    correctas: [0],
     tiempo: 60,
-    explicacion: "Ascensor ubicado en un edificio público. No cuenta con señalética visual ni táctil. Los botones están a una altura superior, inaccesibles para personas usuarias de silla de ruedas o de baja estatura. No hay sistema de audio que indique pisos ni apertura/cierre de puertas. Tampoco hay información en braille ni contraste visual en los comandos.",
+    explicacion: "Si bien el ascensor sirve para derribar una barrera física que puede presentarse al contar con escaleras para acceder a pisos superiores, para que este sea eficiente es necesario que se encuentre nivelado, permitiendo el acceso y uso autónomo de las personas que usan apoyos para desplazarse.",
   },
   {
     id: 2,
@@ -62,9 +62,9 @@ export const preguntas: Pregunta[] = [
       "Barrera comunicacional",
       "Barrera actitudinal"
     ],
-    correctas: [0,1],
+    correctas: [1],
     tiempo: 60,
-    explicacion: "Podría representar una barrera física y comunicacional. La ausencia de senderos podotáctiles en espacios públicos representa una barrera de accesibilidad para personas con discapacidad visual. Estos recorridos, compuestos por superficies texturadas y contrastantes, permiten orientar, advertir y guiar a quienes utilizan el tacto podal o el bastón blanco como herramienta de desplazamiento. Cuando no están presentes, se limita gravemente la autonomía, la seguridad y la posibilidad de transitar el entorno de manera independiente. Sin esta guía táctil, las personas con baja visión o ceguera enfrentan riesgos como desorientación, caídas, choques con obstáculos o dificultad para identificar cruces, rampas, escaleras y accesos. Además, se vulnera el principio de diseño universal, que busca que todos los espacios sean transitables por cualquier persona, sin necesidad de adaptaciones posteriores."
+    explicacion: "La ausencia de senderos podotáctiles en espacios públicos representa una barrera de accesibilidad para personas con discapacidad visual. Estos recorridos, compuestos por superficies texturadas y contrastantes, permiten orientar, advertir y guiar a quienes utilizan el bastón blanco como herramienta de desplazamiento.",
   },
   {
     id: 5,
@@ -76,9 +76,9 @@ export const preguntas: Pregunta[] = [
       "Barrera comunicacional",
       "Barrera actitudinal"
     ],
-    correctas: [0,1],
+    correctas: [1],
     tiempo: 60,
-    explicacion: "Se visualizan barreras físicas y comunicacionales. Se proyecta una película sin subtítulos ni audiodescripción, lo que excluye a personas con discapacidad auditiva, baja visión o ceguera. También afecta a personas neurodivergentes, como quienes están dentro del espectro autista, que pueden necesitar apoyos visuales, anticipación de contenidos o entornos sensorialmente regulados para participar con comodidad. Además, los estudiantes están sentados en el suelo, muy juntos y sin mobiliario adecuado, lo que impide el acceso físico y genera incomodidad para quienes requieren apoyos posturales o mayor espacio personal. Esta disposición puede resultar especialmente desafiante para personas con hipersensibilidad táctil o dificultades de procesamiento sensorial."
+    explicacion: "La actividad principal de la imagen es la visualización de un video, es por eso que podemos decir que la barrera predominante es la comunicación, debido a que se proyecta una película sin subtítulos ni audiodescripción, lo que excluye a personas con discapacidad auditiva, baja visión o ceguera. Además se puede ver una barrera física porque los estudiantes están sentados en el suelo, muy juntos y sin mobiliario adecuado, lo que impide el acceso físico y genera incomodidad para quienes requieren apoyos posturales o mayor espacio personal.",
   },
   {
     id: 6,
@@ -118,8 +118,8 @@ export const preguntas: Pregunta[] = [
       "Barrera comunicacional",
       "Barrera actitudinal"
     ],
-    correctas: [0,2],
+    correctas: [2],
     tiempo: 60,
-    explicacion: "La barrera aparece cuando se naturaliza la inclusión como algo excepcional, sin cuestionar si hay autonomía, participación real (si hay igualdad de condiciones, o si se escucha la voz de la persona con discapacidad en la toma de decisiones) o adaptación del entorno. Asumir que “estar presente” equivale a “estar incluido” reproduce una mirada capacitista, aunque no sea intencional."
+    explicacion: "En la imagen se ve un grupo de personas que están compartiendo un café y charlando. La persona que está en silla de ruedas se encuentra excluida: si bien tiene un café, la cercanía y distancia entre unos y otros es notoria, así como también que una de las personas le da la espalda. Además podríamos pensar en una barrera física porque, si bien tiene el café en la mano, la altura de la mesa no le permite hacerlo de manera autónoma.",
   },
 ];

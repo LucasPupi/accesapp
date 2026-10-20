@@ -85,5 +85,6 @@ Como es una app sobre accesibilidad, la app también intenta serlo:
 - Los formularios tienen etiquetas y mensajes de error claros.
 - Los resultados de cada respuesta y los avisos del timer se anuncian al lector de pantalla.
 - El tiempo se puede pausar, extender o desactivar.
-- Se respeta la preferencia del sistema de "reducir movimiento": con esa opción activada, las animaciones se apagan.
+- Se respeta la preferencia del sistema de "reducir movimiento" (en Windows: Configuración → Accesibilidad → Efectos visuales → Efectos de animación). Con esa opción activada, las animaciones se apagan y la escena de la portada muestra las etiquetas con un fundido suave, sin movimiento.
+- La animación de la portada se repite, así que tiene un botón para pausarla.
 - Los sonidos nunca son la única señal (siempre hay un mensaje en pantalla) y se pueden apagar con el botón **Sonido**; la elección queda guardada en el navegador.

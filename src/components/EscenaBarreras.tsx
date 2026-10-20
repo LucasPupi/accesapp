@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 /**
  * Ilustración animada de la portada.
  * Una lupa recorre una escena y va marcando las tres barreras, igual que en el juego:
@@ -5,8 +9,11 @@
  *  2. Comunicacional: un cartel con letra chiquita y amontonada.
  *  3. Actitudinal: dos personas charlando que ignoran a una persona con bastón blanco.
  *
- * Con "reducir movimiento" activado no hay lupa: se ven las tres etiquetas quietas.
- * Los tiempos de la animación están en globals.css (sección "ESCENA DE LA PORTADA").
+ * - Animación completa: la lupa recorre la escena en un ciclo de 10 s que se repite.
+ *   Tiene un botón para pausarla (las pautas WCAG piden poder detener lo que se mueve solo).
+ * - Con "reducir movimiento" activado en el sistema: la lupa no aparece y las tres
+ *   etiquetas se muestran de a una con un fundido suave, una sola vez.
+ * Los tiempos están en globals.css (buscá "escena").
  */
 
 /** Persona dibujada como pictograma: cabeza, cuerpo y piernas. `x` es el centro. */
@@ -34,8 +41,10 @@ function Etiqueta({ x, y, w, texto, n }: { x: number; y: number; w: number; text
 }
 
 export default function EscenaBarreras() {
+  const [pausada, setPausada] = useState(false);
+
   return (
-    <div className="escena">
+    <div className={`escena ${pausada ? "escena--pausada" : ""}`}>
       <svg
         viewBox="0 0 560 240"
         role="img"
@@ -113,6 +122,25 @@ export default function EscenaBarreras() {
           <circle r="34" fill="none" stroke="#fff" strokeWidth="2" strokeOpacity=".7" transform="scale(.82)" />
         </g>
       </svg>
+
+      <button
+        type="button"
+        className="escena-pausa"
+        onClick={() => setPausada((p) => !p)}
+        aria-pressed={pausada}
+      >
+        {pausada ? (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5.5v13l10.5-6.5L8 5.5Z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        )}
+        <span className="sr-only">{pausada ? "Reanudar animación" : "Pausar animación"}</span>
+      </button>
     </div>
   );
 }

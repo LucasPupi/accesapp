@@ -149,10 +149,28 @@ input:focus-visible {
 .btn-start { margin-top: 28px; width: min(420px, 100%); }
 
 /* ---------- Escena de la portada (lupa que busca barreras) ---------- */
-.escena { background: #eaf3ed; border-bottom: 1px solid var(--line); }
+.escena { position: relative; background: #eaf3ed; border-bottom: 1px solid var(--line); }
 .escena svg { display: block; width: 100%; height: auto; }
 /* Sin animación: la lupa no se muestra y las tres etiquetas quedan a la vista */
 .escena-lupa { display: none; }
+
+/* Botón para pausar la animación (solo aparece cuando la animación completa está activa) */
+.escena-pausa {
+  display: none;
+  position: absolute; left: 8px; top: 8px;
+  width: 36px; height: 36px; padding: 0;
+  place-items: center;
+  border-radius: 999px; border: 1.5px solid var(--line-strong);
+  background: var(--surface); color: var(--ink);
+  cursor: pointer;
+}
+.escena-pausa svg { width: 16px; height: 16px; fill: currentColor; }
+.escena-pausa:hover { border-color: var(--ink-2); }
+@media (max-width: 520px) {
+  .escena-pausa { width: 32px; height: 32px; left: 6px; top: 6px; }
+}
+.escena--pausada .escena-lupa,
+.escena--pausada .escena-chip { animation-play-state: paused; }
 .btn-start svg { width: 20px; height: 20px; }
 
 @media (max-width: 520px) {
@@ -472,6 +490,7 @@ fieldset:disabled .option { cursor: default; }
   .escena-chip--1 { animation: chip-1 10s ease-out .6s infinite both; }
   .escena-chip--2 { animation: chip-2 10s ease-out .6s infinite both; }
   .escena-chip--3 { animation: chip-3 10s ease-out .6s infinite both; }
+  .escena-pausa { display: grid; }
 
   /* Ventana de datos */
   .gate-backdrop { animation: aparecer .25s ease-out both; }
@@ -517,4 +536,11 @@ fieldset:disabled .option { cursor: default; }
     transition-duration: .01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Portada: versión suave sin movimiento. Las etiquetas aparecen de a una
+     con un fundido (sin desplazarse), una sola vez. */
+  .escena-chip { animation: aparecer .7s ease-out both !important; }
+  .escena-chip--1 { animation-delay: .4s !important; }
+  .escena-chip--2 { animation-delay: 1.2s !important; }
+  .escena-chip--3 { animation-delay: 2s !important; }
 }
